@@ -52,6 +52,24 @@ jobs:
             publish/ClaudeMultiAccount.exe
             publish/ClaudeMultiAccount.exe.sha256
 
+      # Release text: .github/release-notes/<tag>.md when it exists, then the checksum. GitHub appends the
+      # generated list of changes after it.
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          SHA256: ${{ steps.checksum.outputs.sha256 }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          {
+            if [ -f "$notes" ]; then cat "$notes"; echo; fi
+            echo '### SHA-256'
+            echo '```'
+            echo "$SHA256  ClaudeMultiAccount.exe"
+            echo '```'
+            echo 'Check it in PowerShell with `(Get-FileHash .\ClaudeMultiAccount.exe -Algorithm SHA256).Hash`.'
+          } > "$RUNNER_TEMP/release-notes.md"
+
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -59,10 +77,5 @@ jobs:
           files: |
             publish/ClaudeMultiAccount.exe
             publish/ClaudeMultiAccount.exe.sha256
-          body: |
-            **SHA-256** of `ClaudeMultiAccount.exe`:
-            ```
-            ${{ steps.checksum.outputs.sha256 }}
-            ```
-            Check it with `(Get-FileHash .\ClaudeMultiAccount.exe -Algorithm SHA256).Hash`.
+          body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
