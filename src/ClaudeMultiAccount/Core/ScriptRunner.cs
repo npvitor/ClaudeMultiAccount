@@ -25,18 +25,8 @@ public static class ScriptRunner
         var scriptPath = Path.Combine(work, id + ".ps1");
         var logPath = Path.Combine(work, id + ".log");
 
-        var script = new StringBuilder()
-            .AppendLine("$ErrorActionPreference = 'Stop'")
-            .AppendLine("try {")
-            .AppendLine(body)
-            .AppendLine("} catch {")
-            .AppendLine($"  ($_ | Out-String) | Out-File -LiteralPath {Quote(logPath)} -Encoding utf8")
-            .AppendLine("  exit 1")
-            .AppendLine("}")
-            .AppendLine("exit 0")
-            .ToString();
         // BOM so Windows PowerShell 5.1 reads non-ASCII names (e.g. "João") correctly.
-        File.WriteAllText(scriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        File.WriteAllText(scriptPath, BuildScript(body, logPath), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
         try
         {
@@ -54,6 +44,18 @@ public static class ScriptRunner
             Paths.TryDelete(scriptPath);
         }
     }
+
+    /// <summary>Wraps <paramref name="body"/> so any error ends up in <paramref name="logPath"/> and exit code 1.</summary>
+    internal static string BuildScript(string body, string logPath) => new StringBuilder()
+        .AppendLine("$ErrorActionPreference = 'Stop'")
+        .AppendLine("try {")
+        .AppendLine(body)
+        .AppendLine("} catch {")
+        .AppendLine($"  ($_ | Out-String) | Out-File -LiteralPath {Quote(logPath)} -Encoding utf8")
+        .AppendLine("  exit 1")
+        .AppendLine("}")
+        .AppendLine("exit 0")
+        .ToString();
 
     /// <summary>PowerShell single-quoted literal.</summary>
     public static string Quote(string value) => "'" + value.Replace("'", "''") + "'";

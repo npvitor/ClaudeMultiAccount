@@ -110,6 +110,12 @@ public static class Elevation
             if (request.RequesterSid != WindowsIdentity.GetCurrent().User?.Value)
                 throw new LauncherException(S.ErrElevatedOtherUser);
 
+            // These ops delete, kill processes of or re-ACL the named account: only ever touch the app's own users.
+            if (request.Op != ElevatedOp.Provision && !IsProfileUserName(request.UserName))
+                throw new LauncherException(string.Format(S.ErrInvalidProfileUser, request.UserName));
+            if (request.Op != ElevatedOp.Provision && LocalUsers.TryGetSid(request.UserName) == request.RequesterSid)
+                throw new LauncherException(string.Format(S.ErrInvalidProfileUser, request.UserName));
+
             switch (request.Op)
             {
                 case ElevatedOp.Create: Create(request); break;
@@ -245,9 +251,16 @@ public static class Elevation
     /// Windows service can refuse a registration by a standard user; once provisioned, the profile
     /// user can register it.
     /// </summary>
+    /// <summary>The shape <see cref="LocalUsers.SuggestUserName"/> produces: "claude-" plus a slug, 20 characters at most.</summary>
+    internal static bool IsProfileUserName(string? userName) =>
+        userName is { Length: <= 20 } && Regex.IsMatch(userName, "^claude-[a-z0-9-]+$", RegexOptions.IgnoreCase);
+
+    internal static bool IsPackageFamilyName(string familyName) =>
+        Regex.IsMatch(familyName, @"^[A-Za-z0-9.\-]+_[a-z0-9]{13}$");
+
     static void Provision(string familyName)
     {
-        if (!Regex.IsMatch(familyName, @"^[A-Za-z0-9.\-]+_[a-z0-9]{13}$"))
+        if (!IsPackageFamilyName(familyName))
             throw new LauncherException($"Invalid package family name '{familyName}'.");
 
         var script = $$"""

@@ -36,21 +36,26 @@ public sealed class ProfileStore
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     readonly object _gate = new();
     readonly List<Profile> _profiles = new();
+    readonly string _file;
+
+    ProfileStore(string file) => _file = file;
 
     public IReadOnlyList<Profile> Profiles => _profiles;
 
-    public static ProfileStore Load()
+    public static ProfileStore Load() => Load(Paths.ProfilesFile);
+
+    internal static ProfileStore Load(string file)
     {
-        var store = new ProfileStore();
+        var store = new ProfileStore(file);
         try
         {
-            if (File.Exists(Paths.ProfilesFile))
-                store._profiles.AddRange(JsonSerializer.Deserialize<List<Profile>>(File.ReadAllText(Paths.ProfilesFile)) ?? new());
+            if (File.Exists(file))
+                store._profiles.AddRange(JsonSerializer.Deserialize<List<Profile>>(File.ReadAllText(file)) ?? new());
         }
         catch (Exception)
         {
             // Keep a copy of the unreadable file instead of silently losing the profiles.
-            try { File.Copy(Paths.ProfilesFile, Paths.ProfilesFile + ".corrupt", overwrite: true); } catch { }
+            try { File.Copy(file, file + ".corrupt", overwrite: true); } catch { }
         }
         return store;
     }
@@ -71,10 +76,10 @@ public sealed class ProfileStore
     {
         lock (_gate)
         {
-            Directory.CreateDirectory(Paths.UserData);
-            var tmp = Paths.ProfilesFile + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(_file)!);
+            var tmp = _file + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(_profiles, Json));
-            File.Move(tmp, Paths.ProfilesFile, overwrite: true);
+            File.Move(tmp, _file, overwrite: true);
         }
     }
 }

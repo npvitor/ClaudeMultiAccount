@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using ClaudeMultiAccount.Localization;
 
 namespace ClaudeMultiAccount.Core;
 
@@ -14,8 +15,18 @@ public static class Secret
     public static string Protect(string plain) =>
         Convert.ToBase64String(Transform(Encoding.UTF8.GetBytes(plain), protect: true));
 
-    public static string Unprotect(string protectedBase64) =>
-        Encoding.UTF8.GetString(Transform(Convert.FromBase64String(protectedBase64), protect: false));
+    /// <summary>Throws a <see cref="LauncherException"/> when the data is damaged or belongs to another Windows user.</summary>
+    public static string Unprotect(string protectedBase64)
+    {
+        try
+        {
+            return Encoding.UTF8.GetString(Transform(Convert.FromBase64String(protectedBase64), protect: false));
+        }
+        catch (Exception ex) when (ex is FormatException or Win32Exception)
+        {
+            throw new LauncherException(S.ErrPasswordUnreadable);
+        }
+    }
 
     public static string GeneratePassword(int length = 28)
     {

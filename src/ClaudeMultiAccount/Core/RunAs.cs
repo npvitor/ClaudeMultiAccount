@@ -22,7 +22,11 @@ public static class RunAs
                 return 0;
             uint ms = timeout is null ? Native.INFINITE : (uint)timeout.Value.TotalMilliseconds;
             if (Native.WaitForSingleObject(pi.hProcess, ms) == Native.WAIT_TIMEOUT)
+            {
+                // Don't leave the step running in the profile after the caller deletes its script and moves on.
+                Native.TerminateProcess(pi.hProcess, 1);
                 throw new LauncherException(S.ErrTimeout);
+            }
             Native.GetExitCodeProcess(pi.hProcess, out var code);
             return code;
         }

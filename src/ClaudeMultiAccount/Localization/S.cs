@@ -5,7 +5,7 @@ namespace ClaudeMultiAccount.Localization;
 /// <summary>UI strings. Portuguese when Windows is in Portuguese, English otherwise.</summary>
 public static class S
 {
-    static readonly bool Pt = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "pt";
+    static bool Pt => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "pt";
     static string T(string pt, string en) => Pt ? pt : en;
 
     // Main window
@@ -171,6 +171,12 @@ public static class S
         "O perfil foi removido, mas o Windows não conseguiu apagar a pasta {0}, que ainda guarda os dados dele (incluindo o login do Claude). Reinicie o computador e apague essa pasta manualmente.",
         "The profile was removed, but Windows couldn't delete {0}, which still holds its data (including the Claude sign-in). Restart the computer and delete that folder manually.");
     public static string NoLogsYet => T("Ainda não há logs.", "There are no logs yet.");
+    public static string ErrPasswordUnreadable => T(
+        "Não foi possível ler a senha guardada deste perfil. Ela só abre na conta do Windows que criou o perfil. Remova o perfil e crie de novo.",
+        "Couldn't read this profile's stored password. It only opens in the Windows account that created the profile. Remove the profile and create it again.");
+    public static string ErrInvalidProfileUser => T(
+        "\"{0}\" não é um usuário criado por este app; a operação foi recusada.",
+        "\"{0}\" isn't a user created by this app; the operation was refused.");
 
     public static string UserComment => "Claude Multi-Account profile";
     public static string TerminalHint => T(

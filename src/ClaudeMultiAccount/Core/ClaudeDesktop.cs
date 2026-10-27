@@ -80,12 +80,15 @@ public static class ClaudeDesktop
         exit /b 0
         """;
 
+    /// <summary><see cref="LaunchScript"/> with CRLF line endings, as cmd expects.</summary>
+    internal static string LaunchScriptContent => LaunchScript.Replace("\r\n", "\n").Replace("\n", "\r\n") + "\r\n";
+
     /// <summary>Starts the profile user's own Claude (MSIX alias or classic install inside the profile).</summary>
     public static void LaunchForProfile(Profile profile, string password)
     {
         var script = Path.Combine(Paths.RequireProfileWork(profile.WindowsUser), "launch-claude.cmd");
         // Never rewrite the file while an earlier keeper may be running it: cmd reads batch files as it goes.
-        var content = LaunchScript.Replace("\n", "\r\n").Replace("\r\r\n", "\r\n") + "\r\n";
+        var content = LaunchScriptContent;
         if (!File.Exists(script) || File.ReadAllText(script) != content)
             File.WriteAllText(script, content, Encoding.ASCII);
 
@@ -97,14 +100,16 @@ public static class ClaudeDesktop
     }
 
     /// <summary>Opens a PowerShell window running as the profile user (for the Claude Code CLI, git, gh...).</summary>
-    public static void OpenTerminal(Profile profile, string password)
+    public static void OpenTerminal(Profile profile, string password) =>
+        RunAs.Run(profile.WindowsUser, password, BuildTerminalCommand(profile), hidden: false, wait: false);
+
+    internal static string BuildTerminalCommand(Profile profile)
     {
         var folder = profile.SharedFolders.FirstOrDefault(Directory.Exists);
         var title = $"Claude - {profile.DisplayName}".Replace("\"", "");
         var script = $"$Host.UI.RawUI.WindowTitle = {ScriptRunner.Quote(title)}; " +
                      (folder is null ? "" : $"Set-Location -LiteralPath {ScriptRunner.Quote(folder)}; ") +
                      $"if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {{ Write-Host {ScriptRunner.Quote(S.TerminalHint)} -ForegroundColor DarkGray }}";
-        var command = $"\"{Paths.PowerShell}\" -NoExit -NoLogo -Command \"{script}\"";
-        RunAs.Run(profile.WindowsUser, password, command, hidden: false, wait: false);
+        return $"\"{Paths.PowerShell}\" -NoExit -NoLogo -Command \"{script}\"";
     }
 }

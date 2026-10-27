@@ -6,8 +6,10 @@ namespace ClaudeMultiAccount.Core;
 /// <summary>"Start with Windows": starts minimized to the tray.</summary>
 public static class StartupRegistration
 {
-    const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string ValueName = "ClaudeMultiAccount";
+
+    /// <summary>HKCU key that holds the entry. Tests point it somewhere harmless.</summary>
+    internal static string RunKey { get; set; } = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     public static bool IsEnabled
     {

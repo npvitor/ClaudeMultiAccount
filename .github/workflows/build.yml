@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
     tags: ['v*']
   pull_request:
 
@@ -17,6 +17,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Unit tests
+        run: dotnet test --project tests/ClaudeMultiAccount.Tests -c Release
+
+      # The hosted runner is a throwaway, elevated VM: the right place for the tests that create a real
+      # hidden Windows user, share folders with it, run steps as it and remove it again.
+      - name: Admin integration tests
+        env:
+          CMA_ADMIN_TESTS: '1'
+        run: dotnet test --project tests/ClaudeMultiAccount.Tests -c Release --no-build -- --filter-class ClaudeMultiAccount.Tests.AdminIntegrationTests
 
       - name: Publish single-file exe
         run: >

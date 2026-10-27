@@ -54,6 +54,9 @@ internal static class Native
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool CloseHandle(IntPtr hObject);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+
     // netapi32: local user management (elevated only)
     public const uint USER_PRIV_USER = 1;
     public const uint UF_SCRIPT = 0x1;

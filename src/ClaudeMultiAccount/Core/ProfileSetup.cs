@@ -108,7 +108,10 @@ public static class ProfileSetup
     }
 
     /// <summary>Marks the shared folders as safe for Git and sets the commit identity, if Git is installed.</summary>
-    public static void ConfigureGit(Profile profile, string password)
+    public static void ConfigureGit(Profile profile, string password) =>
+        ScriptRunner.Run(profile, password, "git", BuildGitScript(profile), TimeSpan.FromMinutes(2));
+
+    internal static string BuildGitScript(Profile profile)
     {
         var body = new StringBuilder()
             .AppendLine("if (-not (Get-Command git -ErrorAction SilentlyContinue)) { exit 0 }")
@@ -119,15 +122,16 @@ public static class ProfileSetup
         foreach (var folder in profile.SharedFolders)
         {
             var path = folder.Replace('\\', '/').TrimEnd('/');
+            // A drive root stays "C:/": Git doesn't treat "C:" as that folder.
+            var self = path.EndsWith(':') ? path + "/" : path;
             // The repo folders belong to the main account, so Git would refuse them as "dubious ownership".
-            foreach (var entry in new[] { path, path + "/*" })
+            foreach (var entry in new[] { self, path + "/*" })
                 body.AppendLine($"if ($existing -notcontains {ScriptRunner.Quote(entry)}) {{ git config --global --add safe.directory {ScriptRunner.Quote(entry)} }}");
         }
         if (!string.IsNullOrWhiteSpace(profile.GitName))
             body.AppendLine($"git config --global user.name {ScriptRunner.Quote(profile.GitName)}");
         if (!string.IsNullOrWhiteSpace(profile.GitEmail))
             body.AppendLine($"git config --global user.email {ScriptRunner.Quote(profile.GitEmail)}");
-
-        ScriptRunner.Run(profile, password, "git", body.ToString(), TimeSpan.FromMinutes(2));
+        return body.ToString();
     }
 }

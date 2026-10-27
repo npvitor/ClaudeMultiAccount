@@ -98,6 +98,14 @@ dotnet publish src/ClaudeMultiAccount/ClaudeMultiAccount.csproj -c Release -r wi
 
 Requires the .NET 10 SDK. Pushing a `v*` tag builds and publishes a GitHub release through the included workflow.
 
+## Tests
+
+```bash
+dotnet test --project tests/ClaudeMultiAccount.Tests
+```
+
+See [TESTING.md](TESTING.md) for the admin integration tests and the manual release checklist.
+
 ## License
 
 [MIT](LICENSE)
