@@ -33,6 +33,7 @@ public static class S
     public static string MainName => T("Conta principal", "Main account");
     public static string MainDetail => T("Sua conta do Windows ({0})", "Your Windows account ({0})");
     public static string ProfileDetail => T("Usuário oculto do Windows: {0}", "Hidden Windows user: {0}");
+    public static string ProfileAdminSuffix => T(" · administrador", " · administrator");
 
     public static string MenuTerminal => T("Abrir terminal deste perfil", "Open terminal for this profile");
     public static string MenuEdit => T("Editar perfil…", "Edit profile…");
@@ -73,12 +74,19 @@ public static class S
     public static string GitName => T("Nome", "Name");
     public static string GitEmail => T("E-mail", "Email");
     public static string LaunchAfter => T("Abrir o Claude deste perfil ao concluir", "Open this profile's Claude when done");
+    public static string AdminOption => T("Tornar este usuário administrador do Windows", "Make this user a Windows administrator");
+    public static string AdminOptionHint => T(
+        "O Claude continua rodando sem privilégios. Comandos que alteram a máquina (como \"dotnet workload install\") passam a pedir só \"Sim\" em vez da senha de administrador. Ative só se você confia nos projetos usados neste perfil.",
+        "Claude still runs without elevated rights. Commands that change the machine (such as \"dotnet workload install\") then ask for a simple \"Yes\" instead of an administrator password. Only enable it if you trust the projects used in this profile.");
+    public static string AdminChangedRestart => T(
+        "A permissão de administrador foi alterada. Se o Claude deste perfil estiver aberto, feche-o e abra de novo para a mudança valer.",
+        "Administrator permission changed. If this profile's Claude is open, close it and open it again for the change to apply.");
     public static string AdminNoticeCreate => T(
         "O Windows vai pedir permissão de administrador para criar um usuário local oculto (ele não aparece na tela de login). A senha é gerada automaticamente e guardada criptografada só para você.",
         "Windows will ask for administrator permission to create a hidden local user (it won't show on the sign-in screen). Its password is generated automatically and stored encrypted for you only.");
     public static string AdminNoticeEdit => T(
-        "Alterar as pastas pede permissão de administrador.",
-        "Changing folders asks for administrator permission.");
+        "Alterar as pastas ou a opção de administrador pede permissão de administrador.",
+        "Changing folders or the administrator option asks for administrator permission.");
     public static string Cancel => T("Cancelar", "Cancel");
     public static string CreateProfile => T("Criar perfil", "Create profile");
     public static string Save => T("Salvar", "Save");
@@ -135,6 +143,7 @@ public static class S
     public static string ErrUserMissing => T("O usuário do Windows \"{0}\" não existe mais. Remova o perfil e crie de novo.", "The Windows user \"{0}\" no longer exists. Remove the profile and create it again.");
     public static string ErrPasswordPolicy => T("A política de senhas deste computador recusou a senha gerada.", "This computer's password policy rejected the generated password.");
     public static string ErrCreateUser => T("Não foi possível criar o usuário do Windows: {0}", "Couldn't create the Windows user: {0}");
+    public static string ErrGroup => T("Não foi possível alterar o grupo \"{0}\" do usuário: {1}", "Couldn't change the user's \"{0}\" group membership: {1}");
     public static string ErrDeleteUser => T("Não foi possível excluir o usuário do Windows: {0}", "Couldn't delete the Windows user: {0}");
     public static string ErrFolderMissing => T("A pasta não existe: {0}", "Folder not found: {0}");
     public static string ErrAcl => T("Não foi possível dar acesso à pasta {0}:\n{1}", "Couldn't grant access to {0}:\n{1}");

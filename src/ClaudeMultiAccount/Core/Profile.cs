@@ -17,6 +17,11 @@ public sealed class Profile
     public List<string> SharedFolders { get; set; } = new();
     public string? GitName { get; set; }
     public string? GitEmail { get; set; }
+    /// <summary>
+    /// The hidden user is in the Administrators group. Its programs still run without admin rights
+    /// (UAC filtered token); commands that need them get a Yes/No prompt instead of a password prompt.
+    /// </summary>
+    public bool IsAdmin { get; set; }
     /// <summary>Claude package version last registered for this profile (MSIX installs).</summary>
     public string? RegisteredClaudeVersion { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;

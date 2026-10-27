@@ -62,6 +62,7 @@ internal static class Native
     public const int NERR_UserNotFound = 2221;
     public const int NERR_UserExists = 2224;
     public const int NERR_PasswordTooShort = 2245;
+    public const int ERROR_MEMBER_NOT_IN_ALIAS = 1377;
     public const int ERROR_MEMBER_IN_ALIAS = 1378;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -100,6 +101,9 @@ internal static class Native
 
     [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
     public static extern int NetLocalGroupAddMembers(string? servername, string groupname, uint level, ref LOCALGROUP_MEMBERS_INFO_3 buf, uint totalentries);
+
+    [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+    public static extern int NetLocalGroupDelMembers(string? servername, string groupname, uint level, ref LOCALGROUP_MEMBERS_INFO_3 buf, uint totalentries);
 
     [DllImport("userenv.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "DeleteProfileW")]
     public static extern bool DeleteProfile(string lpSidString, string? lpProfilePath, string? lpComputerName);

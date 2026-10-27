@@ -27,7 +27,7 @@ public sealed class ProfileCard
         Name = profile?.DisplayName ?? S.MainName;
         Detail = profile is null
             ? string.Format(S.MainDetail, Environment.UserName)
-            : string.Format(S.ProfileDetail, profile.WindowsUser);
+            : string.Format(S.ProfileDetail, profile.WindowsUser) + (profile.IsAdmin ? S.ProfileAdminSuffix : "");
         Initial = Name.Length > 0 ? Name[..1].ToUpperInvariant() : "?";
         ColorBrush = ParseBrush(profile?.Color ?? MainColor);
         MoreVisibility = profile is null ? Visibility.Collapsed : Visibility.Visible;

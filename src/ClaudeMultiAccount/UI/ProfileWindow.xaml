@@ -49,7 +49,11 @@
                 </StackPanel>
             </Grid>
 
-            <CheckBox x:Name="LaunchCheck" Content="{x:Static loc:S.LaunchAfter}" IsChecked="True" Margin="0,18,0,0"
+            <CheckBox x:Name="AdminCheck" Content="{x:Static loc:S.AdminOption}" Margin="0,18,0,0"
+                      FontSize="13" Foreground="{StaticResource Ink}" />
+            <TextBlock Text="{x:Static loc:S.AdminOptionHint}" Style="{StaticResource Hint}" Margin="20,4,0,0" />
+
+            <CheckBox x:Name="LaunchCheck" Content="{x:Static loc:S.LaunchAfter}" IsChecked="True" Margin="0,14,0,0"
                       FontSize="13" Foreground="{StaticResource Ink}" />
 
             <Border Margin="0,16,0,0" Padding="12,10" Background="{StaticResource AccentSoft}" CornerRadius="8">

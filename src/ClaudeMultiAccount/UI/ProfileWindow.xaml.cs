@@ -119,6 +119,7 @@ public partial class ProfileWindow : Window
                 _folders.Add(folder);
             GitNameBox.Text = editing.GitName ?? "";
             GitEmailBox.Text = editing.GitEmail ?? "";
+            AdminCheck.IsChecked = editing.IsAdmin;
             _color = editing.Color;
         }
         else
@@ -237,6 +238,7 @@ public partial class ProfileWindow : Window
             SharedFolders = _folders.ToList(),
             GitName = Clean(GitNameBox.Text),
             GitEmail = Clean(GitEmailBox.Text),
+            IsAdmin = AdminCheck.IsChecked == true,
             ProtectedPassword = Secret.Protect(password),
         };
 
@@ -273,6 +275,7 @@ public partial class ProfileWindow : Window
                     FullName = $"Claude - {name}",
                     ProtectedPassword = profile.ProtectedPassword,
                     Folders = profile.SharedFolders,
+                    Admin = profile.IsAdmin,
                 });
                 if (created is null)
                     throw new OperationCanceledException();
@@ -332,20 +335,23 @@ public partial class ProfileWindow : Window
         var folders = _folders.ToList();
         var added = folders.Where(f => !profile.SharedFolders.Contains(f, StringComparer.OrdinalIgnoreCase)).ToList();
         var removed = profile.SharedFolders.Where(f => !folders.Contains(f, StringComparer.OrdinalIgnoreCase)).ToList();
+        var admin = AdminCheck.IsChecked == true;
+        var adminChanged = admin != profile.IsAdmin;
 
         FormPanel.IsEnabled = false;
         SaveButton.Content = S.Saving;
         _running = true;
         try
         {
-            if (added.Count > 0 || removed.Count > 0)
+            if (added.Count > 0 || removed.Count > 0 || adminChanged)
             {
                 var changed = await Elevation.RunAsync(new ElevatedRequest
                 {
-                    Op = ElevatedOp.Folders,
+                    Op = ElevatedOp.Update,
                     UserName = profile.WindowsUser,
                     Folders = added,
                     RevokeFolders = removed,
+                    Admin = adminChanged ? admin : null,
                 });
                 if (changed is null)
                     return;
@@ -356,10 +362,15 @@ public partial class ProfileWindow : Window
             profile.SharedFolders = folders;
             profile.GitName = Clean(GitNameBox.Text);
             profile.GitEmail = Clean(GitEmailBox.Text);
+            profile.IsAdmin = admin;
             _store.Save();
 
             var password = Secret.Unprotect(profile.ProtectedPassword);
             await Task.Run(() => ProfileSetup.ConfigureGit(profile, password));
+
+            // Windows applies group changes at the next sign-in, i.e. the next time Claude starts in the profile.
+            if (adminChanged)
+                Dialogs.Info(this, S.AdminChangedRestart);
 
             Result = profile;
             _running = false;

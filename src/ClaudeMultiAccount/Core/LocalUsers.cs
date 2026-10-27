@@ -86,15 +86,18 @@ public static class LocalUsers
         Native.NetUserSetInfo(null, userName, 1011, ref full, out _);
     }
 
-    public static void AddToUsersGroup(string userName)
+    /// <summary>Adds the user to, or removes it from, a built-in group such as Users or Administrators.</summary>
+    public static void SetGroupMembership(string userName, WellKnownSidType group, bool member)
     {
-        // The "Users" group has a localized name ("Usuários", "Benutzer"...), so resolve it by SID.
-        var usersGroup = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null).Translate(typeof(NTAccount)).Value;
-        var groupName = usersGroup[(usersGroup.IndexOf('\\') + 1)..];
-        var member = new Native.LOCALGROUP_MEMBERS_INFO_3 { lgrmi3_domainandname = Environment.MachineName + "\\" + userName };
-        int rc = Native.NetLocalGroupAddMembers(null, groupName, 3, ref member, 1);
-        if (rc != 0 && rc != Native.ERROR_MEMBER_IN_ALIAS)
-            throw new LauncherException(string.Format(S.ErrCreateUser, Describe(rc)));
+        // Built-in groups have localized names ("Usuários", "Administradores"...), so resolve them by SID.
+        var account = new SecurityIdentifier(group, null).Translate(typeof(NTAccount)).Value;
+        var groupName = account[(account.IndexOf('\\') + 1)..];
+        var info = new Native.LOCALGROUP_MEMBERS_INFO_3 { lgrmi3_domainandname = Environment.MachineName + "\\" + userName };
+        int rc = member
+            ? Native.NetLocalGroupAddMembers(null, groupName, 3, ref info, 1)
+            : Native.NetLocalGroupDelMembers(null, groupName, 3, ref info, 1);
+        if (rc != 0 && rc != Native.ERROR_MEMBER_IN_ALIAS && rc != Native.ERROR_MEMBER_NOT_IN_ALIAS)
+            throw new LauncherException(string.Format(S.ErrGroup, groupName, Describe(rc)));
     }
 
     public static void Delete(string userName)

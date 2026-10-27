@@ -17,7 +17,7 @@ public static class ElevatedOp
 {
     public const string Create = "create";
     public const string Delete = "delete";
-    public const string Folders = "folders";
+    public const string Update = "update";
     public const string Secure = "secure";
     public const string Provision = "provision";
 }
@@ -32,6 +32,8 @@ public sealed class ElevatedRequest
     public string PackageFamilyName { get; set; } = "";
     public List<string> Folders { get; set; } = new();
     public List<string> RevokeFolders { get; set; } = new();
+    /// <summary>Administrators group membership to apply; null leaves it as it is.</summary>
+    public bool? Admin { get; set; }
 }
 
 public sealed class ElevatedResult
@@ -112,7 +114,7 @@ public static class Elevation
             {
                 case ElevatedOp.Create: Create(request); break;
                 case ElevatedOp.Delete: result.Warning = Delete(request); break;
-                case ElevatedOp.Folders: Folders(request); break;
+                case ElevatedOp.Update: Update(request); break;
                 case ElevatedOp.Secure: SecureWorkFolder(request.UserName, SidOf(request.UserName), request.RequesterSid); break;
                 case ElevatedOp.Provision: Provision(request.PackageFamilyName); break;
                 default: throw new LauncherException($"Unknown operation '{request.Op}'.");
@@ -137,7 +139,9 @@ public static class Elevation
         var granted = new List<string>();
         try
         {
-            LocalUsers.AddToUsersGroup(r.UserName);
+            LocalUsers.SetGroupMembership(r.UserName, WellKnownSidType.BuiltinUsersSid, true);
+            if (r.Admin == true)
+                LocalUsers.SetGroupMembership(r.UserName, WellKnownSidType.BuiltinAdministratorsSid, true);
             LocalUsers.SetHidden(r.UserName, true);
             sid = SidOf(r.UserName);
             foreach (var folder in r.Folders)
@@ -174,13 +178,16 @@ public static class Elevation
         return leftover is null ? null : string.Format(S.WarnProfileLeftover, leftover);
     }
 
-    static void Folders(ElevatedRequest r)
+    /// <summary>Applies an edited profile: shared folders and, when set, administrator membership.</summary>
+    static void Update(ElevatedRequest r)
     {
         var sid = SidOf(r.UserName);
         foreach (var folder in r.RevokeFolders)
             LocalUsers.RevokeFolder(folder, sid);
         foreach (var folder in r.Folders)
             LocalUsers.GrantFolder(folder, sid);
+        if (r.Admin is { } admin)
+            LocalUsers.SetGroupMembership(r.UserName, WellKnownSidType.BuiltinAdministratorsSid, admin);
     }
 
     /// <summary>
