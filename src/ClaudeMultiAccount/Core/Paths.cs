@@ -23,13 +23,20 @@ public static class Paths
     /// </summary>
     public static string ProfileWork(string windowsUser) => Path.Combine(Shared, windowsUser);
 
-    /// <summary><see cref="ProfileWork"/>, or a friendly error when it is missing (profile needs a repair).</summary>
+    /// <summary>
+    /// True when the profile's work folder is the one the elevated step made: real folders (not junctions)
+    /// owned by Administrators, with the sentinel the profile user can't remove. Anything else is treated as
+    /// missing, so nothing is written into or run from a folder someone else could control.
+    /// </summary>
+    public static bool IsTrustedProfileWork(string windowsUser) =>
+        SecureFolder.IsTrustedWorkFolder(Shared, ProfileWork(windowsUser));
+
+    /// <summary><see cref="ProfileWork"/>, or a friendly error when it is missing or untrusted (profile needs a repair).</summary>
     public static string RequireProfileWork(string windowsUser)
     {
-        var path = ProfileWork(windowsUser);
-        if (!Directory.Exists(path))
+        if (!IsTrustedProfileWork(windowsUser))
             throw new LauncherException(S.ErrWorkFolderMissing);
-        return path;
+        return ProfileWork(windowsUser);
     }
 
     public static string Temp => Ensure(Path.Combine(Path.GetTempPath(), "ClaudeMultiAccount"));

@@ -156,8 +156,8 @@ public static class S
         "Claude isn't installed in this profile. Use ⋯ → Repair.");
     public static string ErrNeedInstaller => T("É preciso escolher o instalador do Claude.", "The Claude installer is required.");
     public static string ErrWorkFolderMissing => T(
-        "A pasta de trabalho deste perfil não existe. Use ⋯ → Reparar.",
-        "This profile's work folder is missing. Use ⋯ → Repair.");
+        "A pasta de trabalho deste perfil não existe ou não está protegida. Use ⋯ → Reparar.",
+        "This profile's work folder is missing or not protected. Use ⋯ → Repair.");
     public static string ErrSecureFolder => T(
         "Não foi possível proteger a pasta {0}: {1}\nApague essa pasta manualmente e tente de novo.",
         "Couldn't secure the folder {0}: {1}\nDelete that folder manually and try again.");

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ClaudeMultiAccount.Localization;
+using Microsoft.Win32.SafeHandles;
 
 namespace ClaudeMultiAccount.Core;
 
@@ -196,54 +198,116 @@ public static class Elevation
             LocalUsers.SetGroupMembership(r.UserName, WellKnownSidType.BuiltinAdministratorsSid, admin);
     }
 
+    static void SecureWorkFolder(string userName, string userSid, string requesterSid) =>
+        SecureWorkFolder(Paths.Shared, userName, userSid, requesterSid);
+
     /// <summary>
     /// (Re)creates the profile's work folder with an explicit ACL: admins, the launcher's user and the
-    /// profile user only. The ProgramData root is locked too, so no other account can pre-create the
-    /// folder with a loose ACL and swap a script or installer that later runs inside the profile.
+    /// profile user only, plus an admin-owned sentinel file the profile user can't delete. The ProgramData
+    /// root is made admin-only first, so no other account can redirect it or swap a script or installer
+    /// that later runs inside the profile.
     /// </summary>
-    static void SecureWorkFolder(string userName, string userSid, string requesterSid)
+    internal static void SecureWorkFolder(string root, string userName, string userSid, string requesterSid)
     {
         var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
         var users = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+        var requester = new SecurityIdentifier(requesterSid);
+        var profileUser = new SecurityIdentifier(userSid);
         const InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+
+        var rootAcl = new DirectorySecurity();
+        rootAcl.SetOwner(admins);
+        rootAcl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        rootAcl.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        rootAcl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        rootAcl.AddAccessRule(new FileSystemAccessRule(users, FileSystemRights.ReadAndExecute, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
+
+        var acl = new DirectorySecurity();
+        acl.SetOwner(admins);
+        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        acl.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        acl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        acl.AddAccessRule(new FileSystemAccessRule(requester, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        acl.AddAccessRule(new FileSystemAccessRule(profileUser, FileSystemRights.Modify, inherit, PropagationFlags.None, AccessControlType.Allow));
+
+        var sentinelAcl = new FileSecurity();
+        sentinelAcl.SetOwner(admins);
+        sentinelAcl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        sentinelAcl.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, AccessControlType.Allow));
+        sentinelAcl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, AccessControlType.Allow));
+        sentinelAcl.AddAccessRule(new FileSystemAccessRule(requester, FileSystemRights.Read, AccessControlType.Allow));
+        sentinelAcl.AddAccessRule(new FileSystemAccessRule(profileUser, FileSystemRights.Read, AccessControlType.Allow));
 
         try
         {
-            var root = Directory.CreateDirectory(Paths.Shared);
-            var rootAcl = new DirectorySecurity();
-            rootAcl.SetOwner(admins);
-            rootAcl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-            rootAcl.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            rootAcl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            rootAcl.AddAccessRule(new FileSystemAccessRule(users, FileSystemRights.ReadAndExecute, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
-            root.SetAccessControl(rootAcl);
+            using var rootLock = EnsureRoot(root, rootAcl);
 
             // Start from an empty folder: anything already inside wasn't created under this ACL.
-            var work = new DirectoryInfo(Paths.ProfileWork(userName));
-            if (work.Exists)
-                work.Delete(recursive: true);
-            work.Create();
-            var acl = new DirectorySecurity();
-            acl.SetOwner(admins);
-            acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-            acl.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(admins, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(requesterSid), FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(userSid), FileSystemRights.Modify, inherit, PropagationFlags.None, AccessControlType.Allow));
-            work.SetAccessControl(acl);
+            var work = Path.Combine(root, userName);
+            RemoveWorkFolder(work);
+            acl.CreateDirectory(work); // created with its ACL, never with a looser one first
+            if (SecureFolder.Inspect(work) != FolderTrust.Trusted)
+                throw new LauncherException(string.Format(S.ErrSecureFolder, work, "not owned by Administrators"));
+
+            using (var sentinel = new FileInfo(SecureFolder.SentinelPath(work)).Create(
+                       FileMode.CreateNew, FileSystemRights.Write, FileShare.None, 4096, FileOptions.None, sentinelAcl))
+                sentinel.Write("Claude Multi-Account work folder. Do not delete.\r\n"u8);
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or Win32Exception)
         {
-            throw new LauncherException(string.Format(S.ErrSecureFolder, Paths.Shared, ex.Message));
+            throw new LauncherException(string.Format(S.ErrSecureFolder, root, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Makes sure <paramref name="root"/> is a real folder owned by Administrators or SYSTEM and returns a handle
+    /// that keeps it from being renamed or deleted while the caller works inside it. Anything else at that path (a
+    /// junction, or a folder another account created before the app first ran) is moved aside, never followed.
+    /// </summary>
+    static SafeFileHandle EnsureRoot(string root, DirectorySecurity rootAcl)
+    {
+        var handle = SecureFolder.Open(root, allowDelete: false);
+        if (SecureFolder.Inspect(handle, directory: true) != FolderTrust.Trusted)
+        {
+            if (handle is not null)
+            {
+                handle.Dispose();
+                // A rename moves the link or folder itself, whatever it points to.
+                var aside = $"{root}.untrusted-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..4]}";
+                if (!Native.MoveFileExW(root, aside, 0))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+            rootAcl.CreateDirectory(root);
+            handle = SecureFolder.Open(root, allowDelete: false);
+            if (SecureFolder.Inspect(handle, directory: true) != FolderTrust.Trusted)
+            {
+                handle?.Dispose();
+                throw new LauncherException(string.Format(S.ErrSecureFolder, root, "not owned by Administrators"));
+            }
+        }
+        // Real, admin-owned and held open: the path can't be redirected, so applying the ACL by path is safe.
+        new DirectoryInfo(root).SetAccessControl(rootAcl);
+        return handle!;
+    }
+
+    /// <summary>Removes a work folder. A junction left there is removed itself; .NET never recurses into one.</summary>
+    static void RemoveWorkFolder(string work)
+    {
+        try
+        {
+            Directory.Delete(work, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
         }
     }
 
     static void DeleteWorkFolder(string userName)
     {
-        var work = Paths.ProfileWork(userName);
-        if (Directory.Exists(work))
-            Directory.Delete(work, recursive: true);
+        // Never work through a root the app doesn't own: it could point anywhere.
+        if (SecureFolder.Inspect(Paths.Shared) == FolderTrust.Trusted)
+            RemoveWorkFolder(Paths.ProfileWork(userName));
     }
 
     /// <summary>

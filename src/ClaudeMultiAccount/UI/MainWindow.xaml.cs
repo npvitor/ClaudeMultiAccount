@@ -210,8 +210,8 @@ public partial class MainWindow : Window
 
         await RunBusyAsync(string.Format(S.StatusRepairing, profile.DisplayName), async _ =>
         {
-            // The locked-down work folder is needed by every setup script; recreate it if it's gone.
-            if (!Directory.Exists(Paths.ProfileWork(profile.WindowsUser)) &&
+            // The locked-down work folder is needed by every setup script; recreate it if it's gone or can't be trusted.
+            if (!Paths.IsTrustedProfileWork(profile.WindowsUser) &&
                 await Elevation.RunAsync(new ElevatedRequest { Op = ElevatedOp.Secure, UserName = profile.WindowsUser }) is null)
                 return;
 

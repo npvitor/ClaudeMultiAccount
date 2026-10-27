@@ -61,11 +61,15 @@ public class ScriptRunnerTests
     [InlineData("''", "''''''")]
     [InlineData("", "''")]
     [InlineData("$env:x `n \"q\"", "'$env:x `n \"q\"'")]
+    [InlineData("O’Brien", "'O’’Brien'")]
+    [InlineData("‘a’‚b‛", "'‘‘a’’‚‚b‛‛'")]
     public void Quote_makes_a_powershell_literal(string value, string expected) =>
         Assert.Equal(expected, ScriptRunner.Quote(value));
 
     [Theory]
     [InlineData("it's")]
+    [InlineData("O’Brien ‘x’ ‚y‛")]
+    [InlineData("x’; Remove-Item C:\\nope; ’")]
     [InlineData("$(Remove-Item C:\\nope) `whoami` ; exit 5")]
     [InlineData("João ✓ \"aspas\"")]
     public void Quoted_values_reach_powershell_unchanged(string value)

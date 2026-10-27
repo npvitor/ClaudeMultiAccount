@@ -113,6 +113,17 @@ public class AdminIntegrationTests
             Assert.Contains("boom-it", failed.Message);
             Assert.Throws<LauncherException>(() => RunAs.Run(user, password, $"\"{Paths.Cmd}\" /d /c ping -n 30 127.0.0.1 >nul", hidden: true, wait: true, TimeSpan.FromSeconds(1)));
 
+            // The work folder is trusted, and the profile user can't remove the sentinel that keeps it from being
+            // emptied and turned into a junction, nor the folder itself.
+            Assert.True(Paths.IsTrustedProfileWork(user));
+            var sentinel = SecureFolder.SentinelPath(work);
+            Assert.Throws<ScriptFailedException>(() => ScriptRunner.Run(profile, password, "it-sentinel",
+                $"Remove-Item -LiteralPath {ScriptRunner.Quote(sentinel)} -Force", TimeSpan.FromMinutes(1)));
+            Assert.Throws<ScriptFailedException>(() => ScriptRunner.Run(profile, password, "it-workdir",
+                $"[IO.Directory]::Delete({ScriptRunner.Quote(work)}, $true)", TimeSpan.FromMinutes(1)));
+            Assert.True(File.Exists(sentinel));
+            Assert.True(Paths.IsTrustedProfileWork(user));
+
             // The profile user can actually write to the shared folder.
             ScriptRunner.Run(profile, password, "it-write", $"Set-Content -LiteralPath {ScriptRunner.Quote(Path.Combine(shared.Path, "from-profile.txt"))} -Value ok", TimeSpan.FromMinutes(1));
             Assert.True(File.Exists(Path.Combine(shared.Path, "from-profile.txt")));
@@ -177,6 +188,110 @@ public class AdminIntegrationTests
         {
             if (LocalUsers.Exists(user))
                 Elevated(new ElevatedRequest { Op = ElevatedOp.Delete, UserName = user, Folders = { shared.Path, later.Path } });
+        }
+    }
+
+    // The scenarios below use a throwaway root next to the real one, never the app's own folder.
+    static readonly string Guests = new SecurityIdentifier(WellKnownSidType.BuiltinGuestsSid, null).Value;
+
+    static string NewTestRoot() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "cma-it-" + Guid.NewGuid().ToString("N")[..8]);
+
+    static string OwnerOf(string path) =>
+        new DirectoryInfo(path).GetAccessControl(AccessControlSections.Owner).GetOwner(typeof(SecurityIdentifier))!.Value;
+
+    static void CleanUpTestRoot(string root)
+    {
+        foreach (var entry in new DirectoryInfo(Path.GetDirectoryName(root)!).GetDirectories(Path.GetFileName(root) + "*"))
+        {
+            if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                entry.Delete(); // the link only
+            else
+                entry.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Planted_junction_root_is_moved_aside_and_its_target_is_untouched()
+    {
+        RequireAdminOptIn();
+        var root = NewTestRoot();
+        using var target = new TempDir();
+        Directory.CreateDirectory(Path.Combine(target.Path, "claude-x"));
+        File.WriteAllText(Path.Combine(target.Path, "claude-x", "canary.txt"), "keep me");
+        SecureFolderTests.SetOwner(target.Path, TestEnv.CurrentSid);
+        var aclBefore = new DirectoryInfo(target.Path).GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.All);
+        SecureFolderTests.MakeJunction(root, target.Path);
+        try
+        {
+            Elevation.SecureWorkFolder(root, "claude-x", Guests, TestEnv.CurrentSid);
+
+            // Nothing happened through the junction.
+            Assert.Equal(aclBefore, new DirectoryInfo(target.Path).GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.All));
+            Assert.True(File.Exists(Path.Combine(target.Path, "claude-x", "canary.txt")));
+            Assert.False(File.Exists(SecureFolder.SentinelPath(Path.Combine(target.Path, "claude-x"))));
+
+            // A real admin-owned root replaced it, and the junction was only renamed.
+            Assert.Equal(FolderTrust.Trusted, SecureFolder.Inspect(root));
+            Assert.True(SecureFolder.IsTrustedWorkFolder(root, Path.Combine(root, "claude-x")));
+            var aside = Assert.Single(new DirectoryInfo(Path.GetDirectoryName(root)!).GetDirectories(Path.GetFileName(root) + ".untrusted-*"));
+            Assert.True(aside.Attributes.HasFlag(FileAttributes.ReparsePoint));
+        }
+        finally
+        {
+            CleanUpTestRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Root_pre_created_by_another_account_is_moved_aside()
+    {
+        RequireAdminOptIn();
+        var root = NewTestRoot();
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "planted.cmd"), "echo planted");
+        SecureFolderTests.SetOwner(root, TestEnv.CurrentSid); // not Administrators: not created by the app
+        try
+        {
+            Elevation.SecureWorkFolder(root, "claude-x", Guests, TestEnv.CurrentSid);
+
+            Assert.Equal("S-1-5-32-544", OwnerOf(root));
+            Assert.False(File.Exists(Path.Combine(root, "planted.cmd")));
+            Assert.True(SecureFolder.IsTrustedWorkFolder(root, Path.Combine(root, "claude-x")));
+            var aside = Assert.Single(new DirectoryInfo(Path.GetDirectoryName(root)!).GetDirectories(Path.GetFileName(root) + ".untrusted-*"));
+            Assert.True(File.Exists(Path.Combine(aside.FullName, "planted.cmd")));
+        }
+        finally
+        {
+            CleanUpTestRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Work_folder_turned_into_a_junction_is_replaced_without_following_it()
+    {
+        RequireAdminOptIn();
+        var root = NewTestRoot();
+        using var target = new TempDir();
+        File.WriteAllText(target.File("canary.txt"), "keep me");
+        try
+        {
+            Elevation.SecureWorkFolder(root, "claude-x", Guests, TestEnv.CurrentSid);
+            var work = Path.Combine(root, "claude-x");
+            Directory.Delete(work, recursive: true);
+            SecureFolderTests.MakeJunction(work, target.Path);
+            Assert.False(SecureFolder.IsTrustedWorkFolder(root, work));
+
+            Elevation.SecureWorkFolder(root, "claude-x", Guests, TestEnv.CurrentSid);
+
+            Assert.True(File.Exists(target.File("canary.txt")));
+            Assert.True(SecureFolder.IsTrustedWorkFolder(root, work));
+            Assert.Equal(FolderTrust.Trusted, SecureFolder.Inspect(root)); // the existing good root was kept
+            Assert.Empty(new DirectoryInfo(Path.GetDirectoryName(root)!).GetDirectories(Path.GetFileName(root) + ".untrusted-*"));
+        }
+        finally
+        {
+            CleanUpTestRoot(root);
         }
     }
 

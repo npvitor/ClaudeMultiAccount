@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using ClaudeMultiAccount.Localization;
 
 namespace ClaudeMultiAccount.Core;
@@ -57,6 +58,11 @@ public static class ScriptRunner
         .AppendLine("exit 0")
         .ToString();
 
-    /// <summary>PowerShell single-quoted literal.</summary>
-    public static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+    /// <summary>
+    /// PowerShell single-quoted literal. PowerShell also ends such a string at the typographic quotes
+    /// ‘ ’ ‚ ‛ (U+2018 to U+201B), so those are doubled too; a doubled one stays as that same character.
+    /// </summary>
+    public static string Quote(string value) => "'" + SingleQuotes.Replace(value, "$0$0") + "'";
+
+    static readonly Regex SingleQuotes = new("['‘’‚‛]");
 }

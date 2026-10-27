@@ -17,12 +17,13 @@ Runs without admin rights and changes nothing on the machine (it works only in `
 | `ScriptRunner` | PowerShell quoting against injection, the wrapper's exit code and error log, non-ASCII text |
 | `ProfileSetup` | the Git script run against a temporary global config (safe.directory, drive roots, identity, idempotency, Git missing), update-on-launch decision, missing installer |
 | `ClaudeDesktop` | detection on this machine, launch script (ASCII, CRLF, exit 9 when Claude is missing), terminal command (length, quoting, valid PowerShell) |
+| `SecureFolder` | ProgramData folders are trusted only when they are real folders (junctions are never followed) owned by Administrators or SYSTEM, with the sentinel file in each work folder |
 | `Elevation` | the elevated entry point refuses other accounts, users the app didn't create, the requesting account itself, unknown operations, bad package names and broken request files |
 | `StartupRegistration`, `S`, UI models | Run key on/off, every string in both languages with matching `{0}` placeholders, profile cards and step states |
 
 ### Admin integration tests
 
-`AdminIntegrationTests` creates a real hidden Windows user and goes through the whole lifecycle: create, first sign-in, steps run as that user, writing to a shared folder, Git, edit (folders and administrator flag), repair of the work folder, removal, and a failed create that must leave nothing behind. They run on every CI build. To run them locally, from a terminal opened with **Run as administrator**:
+`AdminIntegrationTests` creates a real hidden Windows user and goes through the whole lifecycle: create, first sign-in, steps run as that user, writing to a shared folder, Git, edit (folders and administrator flag), repair of the work folder, removal, and a failed create that must leave nothing behind. It also checks the ProgramData protections in a throwaway root: a junction or a folder planted there by another account is moved aside without being followed, and a work folder turned into a junction is replaced. Finally, it checks that the profile user can't remove its work folder or the sentinel inside it. They run on every CI build. To run them locally, from a terminal opened with **Run as administrator**:
 
 ```bat
 set CMA_ADMIN_TESTS=1

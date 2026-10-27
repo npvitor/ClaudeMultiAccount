@@ -35,14 +35,34 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
           -o publish
 
+      # The app asks for admin rights and isn't code-signed, so publish a checksum users can verify.
+      - name: SHA-256 checksum
+        id: checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash publish/ClaudeMultiAccount.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("publish/ClaudeMultiAccount.exe.sha256", "$hash  ClaudeMultiAccount.exe`n")
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          "SHA-256 of ClaudeMultiAccount.exe: ``$hash``" >> $env:GITHUB_STEP_SUMMARY
+
       - uses: actions/upload-artifact@v4
         with:
           name: ClaudeMultiAccount-win-x64
-          path: publish/ClaudeMultiAccount.exe
+          path: |
+            publish/ClaudeMultiAccount.exe
+            publish/ClaudeMultiAccount.exe.sha256
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: publish/ClaudeMultiAccount.exe
+          files: |
+            publish/ClaudeMultiAccount.exe
+            publish/ClaudeMultiAccount.exe.sha256
+          body: |
+            **SHA-256** of `ClaudeMultiAccount.exe`:
+            ```
+            ${{ steps.checksum.outputs.sha256 }}
+            ```
+            Check it with `(Get-FileHash .\ClaudeMultiAccount.exe -Algorithm SHA256).Hash`.
           generate_release_notes: true

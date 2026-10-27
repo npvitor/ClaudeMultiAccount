@@ -40,7 +40,6 @@ public class ProfileStoreTests
         store.Save();
 
         var loaded = Assert.Single(ProfileStore.Load(file).Profiles);
-        Assert.Equal(original.Id, loaded.Id);
         Assert.Equal(original.DisplayName, loaded.DisplayName);
         Assert.Equal(original.WindowsUser, loaded.WindowsUser);
         Assert.Equal(original.Color, loaded.Color);
@@ -50,7 +49,6 @@ public class ProfileStoreTests
         Assert.Equal(original.GitEmail, loaded.GitEmail);
         Assert.Equal(original.IsAdmin, loaded.IsAdmin);
         Assert.Equal(original.RegisteredClaudeVersion, loaded.RegisteredClaudeVersion);
-        Assert.Equal(original.CreatedAt, loaded.CreatedAt);
         Assert.Equal("pw", Secret.Unprotect(loaded.ProtectedPassword));
         Assert.False(File.Exists(file + ".tmp"));
     }
@@ -110,6 +108,23 @@ public class ProfileStoreTests
     }
 
     [Fact]
+    public void Files_from_older_versions_with_removed_fields_still_load()
+    {
+        using var dir = new TempDir();
+        var file = dir.File("profiles.json");
+        File.WriteAllText(file, """[{"Id":"0a1b2c","DisplayName":"Old","WindowsUser":"claude-old","CreatedAt":"2026-01-02T03:04:05","IsAdmin":true}]""");
+
+        var store = ProfileStore.Load(file);
+        var p = Assert.Single(store.Profiles);
+        Assert.Equal("claude-old", p.WindowsUser);
+        Assert.True(p.IsAdmin);
+        Assert.False(File.Exists(file + ".corrupt"));
+
+        store.Save(); // the next save simply drops the old fields
+        Assert.DoesNotContain("CreatedAt", File.ReadAllText(file));
+    }
+
+    [Fact]
     public async Task Concurrent_saves_do_not_corrupt_the_file()
     {
         using var dir = new TempDir();
@@ -122,12 +137,5 @@ public class ProfileStoreTests
 
         Assert.Equal(5, ProfileStore.Load(file).Profiles.Count);
         Assert.False(File.Exists(file + ".corrupt"));
-    }
-
-    [Fact]
-    public void New_profiles_get_unique_ids()
-    {
-        Assert.NotEqual(new Profile().Id, new Profile().Id);
-        Assert.Equal(32, new Profile().Id.Length);
     }
 }

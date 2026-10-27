@@ -7,7 +7,6 @@ namespace ClaudeMultiAccount.Core;
 
 public sealed class Profile
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string DisplayName { get; set; } = "";
     /// <summary>The hidden local Windows account that runs this profile's Claude.</summary>
     public string WindowsUser { get; set; } = "";
@@ -24,7 +23,6 @@ public sealed class Profile
     public bool IsAdmin { get; set; }
     /// <summary>Claude package version last registered for this profile (MSIX installs).</summary>
     public string? RegisteredClaudeVersion { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
 /// <summary>
