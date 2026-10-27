@@ -84,9 +84,26 @@ Leia antes de usar: o app cria contas do Windows e pede permissão de administra
 - **Perfis administradores são membros de verdade do grupo Administradores.** O Claude continua rodando sem privilégios, mas um comando que ele rodar pode virar administrador com um único **Sim** no UAC. Ative só em perfis cujos projetos você confia.
 - **"Copiar senha do usuário do Windows"** coloca a senha na área de transferência, onde o histórico (Win+V) e a sincronização da área de transferência podem guardá-la. Limpe depois de usar.
 - **As etapas de administrador** são feitas por uma segunda cópia do app, elevada, que só aceita pedidos da sua própria conta e só mexe nos usuários `claude-*` criados pelo app.
-- O exe ainda não é assinado digitalmente. Baixe só da página de Releases deste repositório e confira o SHA-256 (veja [Instalação](#instalação)).
+- O exe ainda não é assinado digitalmente (veja a [Code signing policy](#code-signing-policy)). Baixe só da página de Releases deste repositório e confira o SHA-256 (veja [Instalação](#instalação)).
 
 Para relatar uma vulnerabilidade, veja o [SECURITY.md](SECURITY.md). Não abra uma issue pública para isso.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+> **Situação:** a assinatura pelo programa da SignPath Foundation está sendo configurada. Enquanto ela não estiver ativa, os releases não são assinados; cada um publica o SHA-256 do exe.
+
+- Committers and reviewers: [npvitor](https://github.com/npvitor)
+- Approvers: [npvitor](https://github.com/npvitor)
+
+Só são assinados os arquivos compilados pelo workflow do GitHub Actions deste repositório a partir de uma tag de release, e cada pedido de assinatura é aprovado manualmente. O workflow roda os testes antes de compilar.
+
+## Privacidade
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+Ou seja: o app não envia nenhuma informação pela rede, a menos que você peça. Ele abre e configura programas que não fazem parte dele e têm os próprios termos de privacidade: o Claude Desktop e o Claude Code CLI ([política de privacidade da Anthropic](https://www.anthropic.com/legal/privacy)) e, quando você os usa num perfil, o Git e o GitHub CLI.
 
 ## Limitações conhecidas
 

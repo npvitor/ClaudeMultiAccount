@@ -9,8 +9,15 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    # Leaves room for the manual approval of the signing request on releases.
+    timeout-minutes: 240
     permissions:
-      contents: write
+      contents: write # create the release
+      actions: read # SignPath downloads the unsigned exe from this run
+    env:
+      # Code signing turns on by itself for release tags once the SignPath secret and variables exist
+      # (see .github/SIGNING.md). Without them, releases are published unsigned with their SHA-256.
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' && vars.SIGNPATH_PROJECT_SLUG != '' && vars.SIGNPATH_SIGNING_POLICY_SLUG != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,14 +35,49 @@ jobs:
           CMA_ADMIN_TESTS: '1'
         run: dotnet test --project tests/ClaudeMultiAccount.Tests -c Release --no-build -- --filter-class ClaudeMultiAccount.Tests.AdminIntegrationTests
 
+      # Release tags (v1.2.3) set the exe's version; other builds keep the one in the project file.
       - name: Publish single-file exe
-        run: >
-          dotnet publish src/ClaudeMultiAccount/ClaudeMultiAccount.csproj
-          -c Release -r win-x64 --self-contained true
-          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
-          -o publish
+        shell: pwsh
+        run: |
+          $props = @('-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true', '-p:EnableCompressionInSingleFile=true')
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+)$') { $props += "-p:Version=$($Matches[1])" }
+          dotnet publish src/ClaudeMultiAccount/ClaudeMultiAccount.csproj -c Release -r win-x64 --self-contained true @props -o publish
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      # The app asks for admin rights and isn't code-signed, so publish a checksum users can verify.
+      # Code signing through the SignPath Foundation. Each request waits for a manual approval in SignPath.
+      - name: Upload unsigned exe for signing
+        id: unsigned
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned
+          path: publish/ClaudeMultiAccount.exe
+
+      - name: Sign with SignPath
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 10800
+          output-artifact-directory: signed
+
+      - name: Use the signed exe
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem signed -Recurse -Filter ClaudeMultiAccount.exe | Select-Object -First 1
+          if (-not $signed) { throw 'The signed artifact has no ClaudeMultiAccount.exe.' }
+          Copy-Item $signed.FullName publish/ClaudeMultiAccount.exe -Force
+          $signature = Get-AuthenticodeSignature publish/ClaudeMultiAccount.exe
+          if ($signature.Status -ne 'Valid') { throw "Signature check failed: $($signature.Status) $($signature.StatusMessage)" }
+          "Signed by: $($signature.SignerCertificate.Subject)" >> $env:GITHUB_STEP_SUMMARY
+
+      # Computed after signing, since the signature changes the file.
       - name: SHA-256 checksum
         id: checksum
         shell: pwsh
@@ -52,8 +94,8 @@ jobs:
             publish/ClaudeMultiAccount.exe
             publish/ClaudeMultiAccount.exe.sha256
 
-      # Release text: .github/release-notes/<tag>.md when it exists, then the checksum. GitHub appends the
-      # generated list of changes after it.
+      # Release text: .github/release-notes/<tag>.md when it exists, then the checksum and the code signing
+      # status. GitHub appends the generated list of changes after it.
       - name: Release notes
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -61,6 +103,7 @@ jobs:
           SHA256: ${{ steps.checksum.outputs.sha256 }}
         run: |
           notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          policy="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#code-signing-policy"
           {
             if [ -f "$notes" ]; then cat "$notes"; echo; fi
             echo '### SHA-256'
@@ -68,12 +111,19 @@ jobs:
             echo "$SHA256  ClaudeMultiAccount.exe"
             echo '```'
             echo 'Check it in PowerShell with `(Get-FileHash .\ClaudeMultiAccount.exe -Algorithm SHA256).Hash`.'
+            echo
+            if [ "$SIGN" = "true" ]; then
+              echo "Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the [Code signing policy]($policy)."
+            else
+              echo "This release is not code-signed. See the [Code signing policy]($policy)."
+            fi
           } > "$RUNNER_TEMP/release-notes.md"
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: Claude Multi-Account ${{ github.ref_name }}
           files: |
             publish/ClaudeMultiAccount.exe
             publish/ClaudeMultiAccount.exe.sha256

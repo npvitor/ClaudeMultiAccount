@@ -84,9 +84,26 @@ Read this before using the app; it creates Windows accounts and asks for adminis
 - **Administrator profiles are real members of the Administrators group.** Claude still runs without elevated rights there, but a command it runs can get admin rights with a single **Yes** on a UAC prompt. Enable it only for profiles whose projects you trust.
 - **"Copy Windows user password"** puts the password on the clipboard, where clipboard history (Win+V) and clipboard sync can keep it. Clear it after use.
 - **Admin steps** are done by a second, elevated copy of the app that only accepts requests from your own account and only touches the `claude-*` users the app created.
-- The exe is not code-signed yet. Download it only from this repository's Releases page and compare the SHA-256 (see [Install](#install)).
+- The exe is not code-signed yet (see [Code signing policy](#code-signing-policy)). Download it only from this repository's Releases page and compare the SHA-256 (see [Install](#install)).
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a public issue for it.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+> **Status:** signing through the SignPath Foundation program is being set up. Until it is active, releases are not signed; each one publishes the SHA-256 of its exe instead.
+
+- Committers and reviewers: [npvitor](https://github.com/npvitor)
+- Approvers: [npvitor](https://github.com/npvitor)
+
+Only files built by this repository's GitHub Actions workflow from a release tag are signed, and every signing request is approved by hand. The workflow runs the tests before building.
+
+## Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+It starts and configures software that is not part of it and has its own privacy terms: Claude Desktop and the Claude Code CLI ([Anthropic privacy policy](https://www.anthropic.com/legal/privacy)), and Git or the GitHub CLI when you use them in a profile.
 
 ## Known limitations
 
