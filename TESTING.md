@@ -32,18 +32,39 @@ dotnet test --project tests/ClaudeMultiAccount.Tests -- --filter-class ClaudeMul
 
 Add `set CMA_ADMIN_TESTS_CLAUDE=1` to also register Claude Desktop (MSIX) in the test user and launch it. That can provision the Claude package for every user of the machine. The test user is removed at the end, even when a check fails.
 
+## UI smoke test
+
+[`tests/ui-smoke.ps1`](tests/ui-smoke.ps1) starts the built exe and drives its real window through Windows UI Automation. It needs no admin rights and never creates, edits or removes a profile. It only presses **Save** with names the form must refuse, and never clicks anything that asks for UAC.
+
+| Area | What is checked |
+| --- | --- |
+| Start | the main window opens; one **Open Claude** button per account; the "Claude not found" banner matches whether Claude is installed |
+| Single instance | a second start exits at once and brings the existing window forward, also when it was hidden in the tray |
+| Settings | 4 menu items; **Start with Windows** matches the registry; **About** shows the exe's version |
+| New profile | example hint; Windows user suggestion without accents and within 20 characters; existing default folders listed; 8 colors; administrator off and "open when done" on by default; empty name and name with quotes refused; **Cancel** closes |
+| Tray | closing the window keeps the app in the tray; **Exit** quits; `--tray` starts without a window |
+| Side effects | `profiles.json`, the startup entry and the local `claude-*` users are unchanged |
+
+Build the exe as in the README (`dotnet publish … -o publish`), exit any running copy of the app from the tray, then run it with Windows PowerShell 5.1 from a signed-in desktop:
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\ui-smoke.ps1 -Exe publish\ClaudeMultiAccount.exe
+```
+
+The app's windows open and close on their own for about a minute; don't use the mouse or keyboard meanwhile. The script prints one line per check and exits with 1 when any check fails. It refuses to start while the app is already running, so it never closes your own copy. It works with the system in English or Portuguese and on machines that already have profiles.
+
 ## Manual checklist (before a release)
 
-The parts below need a person: UAC prompts, windows, the tray and Claude's own sign-in.
+The parts below need a person: UAC prompts, the tray icon menu, other apps (Explorer, browser, clipboard) and Claude's own sign-in. The UI smoke test already covers starting, single instance, the settings menu, the New profile form up to **Save**, closing to the tray and `--tray`.
 
-1. Start the exe: the main window opens; a second start brings that same window forward.
-2. **New profile**: name with accents, default folders listed, add/remove a folder, pick a color. Cancel the UAC prompt: back to the form, nothing created. Approve it: all four steps turn green and Claude opens in the profile.
+1. Start the exe from Explorer (as a user would) and check SmartScreen's message for the unsigned file.
+2. **New profile**: add/remove a folder, pick a color. Cancel the UAC prompt: back to the form, nothing created. Approve it: all four steps turn green and Claude opens in the profile.
 3. Sign in to Claude in the profile with another account; close and **Open Claude** again: still signed in. Main account and profile open side by side.
 4. **⋯ → Open terminal**: PowerShell titled `Claude - <name>`, in the first shared folder, `whoami` shows the hidden user, `git status` works in a repo.
 5. **⋯ → Edit**: rename, change color, add a folder (UAC), toggle administrator (UAC + restart notice).
 6. **⋯ → Repair**: finishes with "Done!"; also after deleting `%ProgramData%\ClaudeMultiAccount\<user>`.
 7. **⋯ → Copy password**: clipboard has the password.
-8. Close the window: tray balloon once; tray menu opens each profile; **Exit** quits.
-9. **Settings → Start with Windows**: sign out and in, app starts in the tray only.
+8. Close the window: the tray balloon shows once; right-click the tray icon: it opens each profile, **Show window** and **Exit** work.
+9. **Settings → Start with Windows**: sign out and in, app starts in the tray only. **Settings → Open logs folder** and the banner's **Download** open Explorer and the browser.
 10. **⋯ → Remove**: confirm, UAC; card disappears, the user is gone from `lusrmgr.msc`/`net user`, `C:\Users\<user>` is deleted (or the warning names it).
 11. Windows in English and in Portuguese: texts follow the system language.
