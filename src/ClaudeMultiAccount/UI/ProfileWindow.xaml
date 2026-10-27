@@ -1,0 +1,90 @@
+<Window x:Class="ClaudeMultiAccount.UI.ProfileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ClaudeMultiAccount.Localization"
+        Icon="/Assets/app.ico"
+        Width="520" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Bg}"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+    <StackPanel Margin="24,20,24,22">
+        <TextBlock x:Name="Heading" FontSize="19" FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+
+        <!-- Form -->
+        <StackPanel x:Name="FormPanel">
+            <TextBlock Text="{x:Static loc:S.FieldName}" Style="{StaticResource FieldLabel}" />
+            <TextBox x:Name="NameBox" MaxLength="40" TextChanged="NameBox_TextChanged" />
+            <TextBlock x:Name="UserHint" Style="{StaticResource Hint}" Margin="2,6,0,0" />
+
+            <TextBlock Text="{x:Static loc:S.FieldColor}" Style="{StaticResource FieldLabel}" />
+            <WrapPanel x:Name="ColorPanel" />
+
+            <TextBlock Text="{x:Static loc:S.FieldFolders}" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{x:Static loc:S.FoldersHint}" Style="{StaticResource Hint}" Margin="0,-2,0,8" />
+            <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="7">
+                <ListBox x:Name="FolderList" Height="92" BorderThickness="0" Background="Transparent" Margin="2"
+                         FontSize="13" Foreground="{StaticResource Ink}" SelectionMode="Extended" />
+            </Border>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button Style="{StaticResource SecondaryButton}" Content="{x:Static loc:S.AddFolder}" Click="AddFolder_Click" />
+                <Button Style="{StaticResource SecondaryButton}" Content="{x:Static loc:S.RemoveFolder}" Margin="8,0,0,0" Click="RemoveFolder_Click" />
+            </StackPanel>
+
+            <TextBlock Text="{x:Static loc:S.FieldGit}" Style="{StaticResource FieldLabel}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{x:Static loc:S.GitName}" Style="{StaticResource Hint}" Margin="2,0,0,4" />
+                    <TextBox x:Name="GitNameBox" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="{x:Static loc:S.GitEmail}" Style="{StaticResource Hint}" Margin="2,0,0,4" />
+                    <TextBox x:Name="GitEmailBox" />
+                </StackPanel>
+            </Grid>
+
+            <CheckBox x:Name="LaunchCheck" Content="{x:Static loc:S.LaunchAfter}" IsChecked="True" Margin="0,18,0,0"
+                      FontSize="13" Foreground="{StaticResource Ink}" />
+
+            <Border Margin="0,16,0,0" Padding="12,10" Background="{StaticResource AccentSoft}" CornerRadius="8">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#x1F6E1;" FontFamily="Segoe UI Emoji" FontSize="15" Margin="0,0,10,0" />
+                    <TextBlock x:Name="AdminNotice" Style="{StaticResource Hint}" Foreground="#3730A3" />
+                </DockPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Style="{StaticResource SecondaryButton}" Content="{x:Static loc:S.Cancel}" IsCancel="True" />
+                <Button x:Name="SaveButton" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" IsDefault="True" Click="Save_Click" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Progress (new profile) -->
+        <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,6,0,0">
+            <TextBlock Text="{x:Static loc:S.StepsHint}" Style="{StaticResource Hint}" Margin="0,0,0,14" />
+            <ItemsControl x:Name="StepList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,0,0,12">
+                            <TextBlock DockPanel.Dock="Left" Width="24" Text="{Binding Glyph}" Foreground="{Binding GlyphBrush}"
+                                       FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="{Binding Text}" Foreground="{Binding TextBrush}" FontSize="13.5" TextWrapping="Wrap" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Border x:Name="ErrorBox" Visibility="Collapsed" Margin="0,6,0,0" Padding="12,10" Background="#FDECEC" CornerRadius="8">
+                <TextBox x:Name="ErrorText" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent"
+                         Foreground="{StaticResource Danger}" Padding="0" MaxHeight="220" VerticalScrollBarVisibility="Auto" />
+            </Border>
+            <Button x:Name="CloseButton" Visibility="Collapsed" HorizontalAlignment="Right" Margin="0,16,0,0"
+                    Style="{StaticResource PrimaryButton}" Content="{x:Static loc:S.Close}" Click="CloseButton_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>
