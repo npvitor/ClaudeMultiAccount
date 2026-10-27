@@ -141,10 +141,8 @@ public static class Elevation
             LocalUsers.SetHidden(r.UserName, true);
             sid = SidOf(r.UserName);
             foreach (var folder in r.Folders)
-            {
-                LocalUsers.GrantFolder(folder, sid);
-                granted.Add(folder);
-            }
+                if (LocalUsers.GrantFolder(folder, sid))
+                    granted.Add(folder);
             SecureWorkFolder(r.UserName, sid, r.RequesterSid);
         }
         catch

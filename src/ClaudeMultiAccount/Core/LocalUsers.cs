@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -144,19 +145,64 @@ public static class LocalUsers
         return Directory.Exists(path) ? path : null;
     }
 
-    /// <summary>Gives the user modify rights on a folder (inherited by everything inside it).</summary>
-    public static void GrantFolder(string folder, string sid)
+    /// <summary>
+    /// Gives the user modify rights on a folder (inherited by everything inside it). Returns false when the
+    /// folder already allows it, which is common: folders created at the drive root grant Modify to
+    /// Authenticated Users. Skipping matters because icacls rewrites the ACL of every file below the
+    /// folder, which takes many minutes on a big repos folder.
+    /// </summary>
+    public static bool GrantFolder(string folder, string sid)
     {
         if (!Directory.Exists(folder))
             throw new LauncherException(string.Format(S.ErrFolderMissing, folder));
+        if (HasModifyAccess(folder, sid))
+            return false;
         if (RunTool("icacls.exe", out var output, folder, "/grant", $"*{sid}:(OI)(CI)M", "/C", "/Q") != 0)
             throw new LauncherException(string.Format(S.ErrAcl, folder, output.Trim()));
+        return true;
     }
 
+    /// <summary>Removes the entry <see cref="GrantFolder"/> added. Folders it skipped have none, so they're left alone.</summary>
     public static void RevokeFolder(string folder, string sid)
     {
-        if (Directory.Exists(folder))
+        if (!Directory.Exists(folder))
+            return;
+        var explicitRules = new DirectoryInfo(folder).GetAccessControl()
+            .GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier));
+        if (explicitRules.Cast<FileSystemAccessRule>().Any(r => r.IdentityReference.Value == sid))
             RunTool("icacls.exe", out _, folder, "/remove:g", $"*{sid}", "/C", "/Q");
+    }
+
+    /// <summary>
+    /// True when the folder's ACL already lets the user modify the folder and everything inside it,
+    /// directly or through Everyone, Authenticated Users or Users.
+    /// </summary>
+    public static bool HasModifyAccess(string folder, string sid)
+    {
+        var who = new HashSet<string> { "S-1-1-0", "S-1-5-11", "S-1-5-32-545", sid };
+        var rules = new DirectoryInfo(folder).GetAccessControl()
+            .GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier));
+        bool self = false, children = false;
+        foreach (FileSystemAccessRule rule in rules)
+        {
+            if (!who.Contains(rule.IdentityReference.Value))
+                continue;
+            if (rule.AccessControlType == AccessControlType.Deny)
+            {
+                if ((rule.FileSystemRights & (FileSystemRights.Write | FileSystemRights.Delete)) != 0)
+                    return false;
+                continue;
+            }
+            if ((rule.FileSystemRights & FileSystemRights.Modify) != FileSystemRights.Modify)
+                continue;
+            if ((rule.PropagationFlags & PropagationFlags.InheritOnly) == 0)
+                self = true;
+            if (rule.InheritanceFlags.HasFlag(InheritanceFlags.ContainerInherit) &&
+                rule.InheritanceFlags.HasFlag(InheritanceFlags.ObjectInherit) &&
+                (rule.PropagationFlags & PropagationFlags.NoPropagateInherit) == 0)
+                children = true;
+        }
+        return self && children;
     }
 
     static int RunTool(string exe, out string output, params string[] args) =>

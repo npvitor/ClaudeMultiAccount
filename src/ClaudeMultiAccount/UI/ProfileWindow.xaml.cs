@@ -1,12 +1,14 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ClaudeMultiAccount.Core;
 using ClaudeMultiAccount.Localization;
 using Microsoft.Win32;
@@ -17,11 +19,18 @@ public enum StepState { Pending, Running, Done, Failed }
 
 public sealed class StepItem : INotifyPropertyChanged
 {
+    readonly Stopwatch _clock = new();
     StepState _state;
 
-    public StepItem(string text) => Text = text;
+    public StepItem(string text, string? detail = null)
+    {
+        Text = text;
+        Detail = detail;
+    }
 
     public string Text { get; }
+    /// <summary>What is happening right now, shown under the step while it runs.</summary>
+    public string? Detail { get; }
 
     public StepState State
     {
@@ -29,10 +38,28 @@ public sealed class StepItem : INotifyPropertyChanged
         set
         {
             _state = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Glyph)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GlyphBrush)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TextBrush)));
+            if (value == StepState.Running)
+                _clock.Restart();
+            else
+                _clock.Stop();
+            foreach (var name in new[] { nameof(Glyph), nameof(GlyphBrush), nameof(TextBrush), nameof(GlyphVisibility),
+                                         nameof(SpinnerVisibility), nameof(DetailVisibility), nameof(ElapsedText) })
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
+    }
+
+    public Visibility GlyphVisibility => State == StepState.Running ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility SpinnerVisibility => State == StepState.Running ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DetailVisibility => State == StepState.Running && Detail is not null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Time spent on the step ("0:42"), so a slow step visibly keeps moving.</summary>
+    public string ElapsedText => State == StepState.Pending ? "" : $"{(int)_clock.Elapsed.TotalMinutes}:{_clock.Elapsed.Seconds:00}";
+
+    /// <summary>Called every second by the window to refresh <see cref="ElapsedText"/>.</summary>
+    public void Tick()
+    {
+        if (State == StepState.Running)
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ElapsedText)));
     }
 
     public string Glyph => State switch
@@ -213,11 +240,27 @@ public partial class ProfileWindow : Window
             ProtectedPassword = Secret.Protect(password),
         };
 
-        var steps = new[] { new StepItem(S.StepCreateUser), new StepItem(S.StepPrepare), new StepItem(S.StepRegister), new StepItem(S.StepGit) };
+        var steps = new[]
+        {
+            new StepItem(S.StepCreateUser, S.StepCreateUserDetail),
+            new StepItem(S.StepPrepare, S.StepPrepareDetail),
+            new StepItem(S.StepRegister, S.StepRegisterDetail),
+            new StepItem(S.StepGit),
+        };
         StepList.ItemsSource = steps;
         FormPanel.Visibility = Visibility.Collapsed;
         ProgressPanel.Visibility = Visibility.Visible;
+        WorkingBar.Visibility = Visibility.Visible;
         _running = true;
+
+        // Keeps the elapsed time ticking so long steps visibly make progress.
+        var clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        clock.Tick += (_, _) =>
+        {
+            foreach (var step in steps)
+                step.Tick();
+        };
+        clock.Start();
 
         try
         {
@@ -262,6 +305,11 @@ public partial class ProfileWindow : Window
             ErrorBox.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
         }
+        finally
+        {
+            clock.Stop();
+            WorkingBar.Visibility = Visibility.Collapsed;
+        }
     }
 
     static async Task RunStep(StepItem step, Func<Task> work)
@@ -286,6 +334,7 @@ public partial class ProfileWindow : Window
         var removed = profile.SharedFolders.Where(f => !folders.Contains(f, StringComparer.OrdinalIgnoreCase)).ToList();
 
         FormPanel.IsEnabled = false;
+        SaveButton.Content = S.Saving;
         _running = true;
         try
         {
@@ -324,6 +373,7 @@ public partial class ProfileWindow : Window
         {
             _running = false;
             FormPanel.IsEnabled = true;
+            SaveButton.Content = S.Save;
         }
     }
 

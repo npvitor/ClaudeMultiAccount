@@ -82,12 +82,26 @@ public static class S
     public static string Cancel => T("Cancelar", "Cancel");
     public static string CreateProfile => T("Criar perfil", "Create profile");
     public static string Save => T("Salvar", "Save");
+    public static string Saving => T("Salvando…", "Saving…");
     public static string Close => T("Fechar", "Close");
-    public static string StepCreateUser => T("Criando o usuário oculto do Windows", "Creating the hidden Windows user");
+    public static string StepCreateUser => T(
+        "Criando o usuário oculto e liberando as pastas (pastas muito grandes podem levar alguns minutos)",
+        "Creating the hidden user and sharing the folders (very large folders can take a few minutes)");
     public static string StepPrepare => T("Preparando o perfil do Windows (primeiro acesso)", "Preparing the Windows profile (first sign-in)");
     public static string StepRegister => T("Instalando o Claude Desktop no perfil", "Installing Claude Desktop in the profile");
     public static string StepGit => T("Configurando o Git", "Configuring Git");
-    public static string StepsHint => T("Isso leva cerca de um minuto.", "This takes about a minute.");
+    public static string StepsHint => T(
+        "Normalmente leva de 1 a 3 minutos. Pode continuar usando o computador; esta janela se atualiza sozinha.",
+        "This usually takes 1 to 3 minutes. Feel free to keep working; this window updates by itself.");
+    public static string StepCreateUserDetail => T(
+        "Aprove o pedido de administrador do Windows. Se ele não aparecer, procure o ícone piscando na barra de tarefas.",
+        "Approve the Windows administrator prompt. If you don't see it, look for a flashing icon on the taskbar.");
+    public static string StepPrepareDetail => T(
+        "O Windows está criando a pasta do novo usuário (costuma levar de 10 a 30 segundos).",
+        "Windows is creating the new user's folder (usually 10 to 30 seconds).");
+    public static string StepRegisterDetail => T(
+        "Registrando o pacote do Claude para o novo usuário. Se o Windows pedir permissão de administrador de novo, aprove.",
+        "Registering the Claude package for the new user. If Windows asks for administrator permission again, approve it.");
 
     public static string SelectInstallerTitle => T("Selecione o instalador do Claude", "Select the Claude installer");
     public static string SelectInstallerInfo => T(
