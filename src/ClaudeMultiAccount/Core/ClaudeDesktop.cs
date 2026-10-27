@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using ClaudeMultiAccount.Localization;
 
 namespace ClaudeMultiAccount.Core;
@@ -59,21 +60,39 @@ public static class ClaudeDesktop
     }
 
     /// <summary>
-    /// Starts the profile user's own Claude. cmd expands %LOCALAPPDATA% with that user's environment,
-    /// so this finds the MSIX alias or the classic install inside the profile.
+    /// Keeps the "Run as" process alive while the profile user's Claude runs. Windows gives that user access
+    /// to this desktop only for the lifetime of the process CreateProcessWithLogonW started; when it exits at
+    /// once (e.g. "cmd /c start"), Claude's GPU and network helper processes can't start and Claude quits
+    /// without ever showing a window. cmd expands %LOCALAPPDATA% with the profile user's environment.
     /// </summary>
+    const string LaunchScript = """
+        @echo off
+        set "ALIAS=%LOCALAPPDATA%\Microsoft\WindowsApps\claude-desktop.exe"
+        set "CLASSIC=%LOCALAPPDATA%\AnthropicClaude\claude.exe"
+        set "RUNNING="
+        tasklist /nh /fi "username eq %USERDOMAIN%\%USERNAME%" /fi "imagename eq claude.exe" 2>nul | find /i "claude.exe" >nul && set "RUNNING=1"
+        if exist "%ALIAS%" (start "" "%ALIAS%") else if exist "%CLASSIC%" (start "" "%CLASSIC%") else exit /b 9
+        rem Claude was already open: the keeper started with it is still running, this click only brings it forward.
+        if defined RUNNING exit /b 0
+        :keep
+        ping -n 16 127.0.0.1 >nul
+        tasklist /nh /fi "username eq %USERDOMAIN%\%USERNAME%" /fi "imagename eq claude.exe" 2>nul | find /i "claude.exe" >nul && goto keep
+        exit /b 0
+        """;
+
+    /// <summary>Starts the profile user's own Claude (MSIX alias or classic install inside the profile).</summary>
     public static void LaunchForProfile(Profile profile, string password)
     {
-        const string msixAlias = @"%LOCALAPPDATA%\Microsoft\WindowsApps\claude-desktop.exe";
-        const string classicExe = @"%LOCALAPPDATA%\AnthropicClaude\claude.exe";
-        var command =
-            $"\"{Paths.Cmd}\" /d /c if exist \"{msixAlias}\" (start \"\" \"{msixAlias}\") " +
-            $"else if exist \"{classicExe}\" (start \"\" \"{classicExe}\") else exit /b 9";
+        var script = Path.Combine(Paths.RequireProfileWork(profile.WindowsUser), "launch-claude.cmd");
+        // Never rewrite the file while an earlier keeper may be running it: cmd reads batch files as it goes.
+        var content = LaunchScript.Replace("\n", "\r\n").Replace("\r\r\n", "\r\n") + "\r\n";
+        if (!File.Exists(script) || File.ReadAllText(script) != content)
+            File.WriteAllText(script, content, Encoding.ASCII);
 
-        var code = RunAs.Run(profile.WindowsUser, password, command, hidden: true, wait: true, TimeSpan.FromMinutes(2));
+        var code = RunAs.RunDetached(profile.WindowsUser, password, $"\"{Paths.Cmd}\" /d /c \"\"{script}\"\"", hidden: true, TimeSpan.FromSeconds(3));
         if (code == 9)
             throw new LauncherException(S.ErrClaudeMissingInProfile);
-        if (code != 0)
+        if (code is not null and not 0)
             throw new LauncherException(string.Format(S.ErrStep, $"exit code {code}"));
     }
 
