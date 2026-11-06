@@ -178,6 +178,56 @@ public static class S
         "\"{0}\" não é um usuário criado por este app; a operação foi recusada.",
         "\"{0}\" isn't a user created by this app; the operation was refused.");
 
+    public static string ErrNoSessionsSelected => T("Selecione pelo menos uma sessão.", "Select at least one session.");
+    public static string ErrSessionArchiveInvalid => T(
+        "Este arquivo não é uma exportação de sessões válida do Claude Multi-Account ({0}). Nada foi importado.",
+        "This file isn't a valid Claude Multi-Account sessions export ({0}). Nothing was imported.");
+    public static string ErrSessionArchiveNewer => T(
+        "Este arquivo foi exportado por uma versão mais nova do Claude Multi-Account. Atualize o app para importá-lo.",
+        "This file was exported by a newer version of Claude Multi-Account. Update the app to import it.");
+    public static string ErrSessionArchiveEmpty => T("Este arquivo não tem nenhuma sessão.", "This file has no sessions.");
+
+    // Sessions
+    public static string MenuSessions => T("Sessões do Claude Code…", "Claude Code sessions…");
+    public static string MenuImportSessions => T("Importar sessões de arquivo…", "Import sessions from file…");
+    public static string SessionsTitle => T("Sessões do Claude Code — {0}", "Claude Code sessions — {0}");
+    public static string SessionsHint => T(
+        "Escolha as conversas para salvar num arquivo ou copiar direto para outra conta. As conversas continuam aqui também.",
+        "Pick the conversations to save to a file or copy straight to another account. They stay here too.");
+    public static string SessionsLoading => T("Lendo as sessões…", "Reading sessions…");
+    public static string SessionsNone => T(
+        "Nenhuma sessão do Claude Code nesta conta ainda.",
+        "No Claude Code sessions in this account yet.");
+    public static string SessionsSelectAll => T("Selecionar todas", "Select all");
+    public static string SessionsSelected => T("{0} de {1} selecionadas", "{0} of {1} selected");
+    public static string SessionsCopyTo => T("Copiar para:", "Copy to:");
+    public static string SessionsCopy => T("Copiar", "Copy");
+    public static string SessionsSaveFile => T("Salvar arquivo…", "Save file…");
+    public static string SessionsUntitled => T("(sem título)", "(untitled)");
+    public static string SessionsFilter => T("Sessões do Claude", "Claude sessions") + " (*.zip)|*.zip";
+    public static string SessionsFilePrefix => T("sessoes-claude", "claude-sessions");
+    public static string StatusExporting => T("Exportando {0} sessão(ões)…", "Exporting {0} session(s)…");
+    public static string StatusCopying => T("Copiando {0} sessão(ões) para \"{1}\"…", "Copying {0} session(s) to \"{1}\"…");
+    public static string StatusImporting => T("Importando sessões para \"{0}\"…", "Importing sessions into \"{0}\"…");
+    public static string ExportDone => T("{0} sessão(ões) salvas em:\n{1}", "{0} session(s) saved to:\n{1}");
+    public static string ConfirmImport => T(
+        "Importar {0} sessão(ões) de \"{1}\" (exportadas em {2}) para \"{3}\"?\n\nUma conversa que já existe aqui só é substituída quando a importada é a continuação dela; nada desta conta é perdido.",
+        "Import {0} session(s) from \"{1}\" (exported {2}) into \"{3}\"?\n\nA conversation that already exists here is only replaced when the imported one continues it; nothing in this account is lost.");
+    public static string ImportSummary => T("Sessões copiadas para \"{0}\":", "Sessions copied to \"{0}\":");
+    public static string ImportNew => T("{0} nova(s)", "{0} new");
+    public static string ImportUpdated => T("{0} atualizada(s) (continuadas na outra conta)", "{0} updated (continued in the other account)");
+    public static string ImportUnchanged => T("{0} já estava(m) aqui, igual(is)", "{0} already here, unchanged");
+    public static string ImportKeptNewer => T("{0} mantida(s): esta conta tem uma versão mais nova", "{0} kept: this account has a newer version");
+    public static string ImportConflict => T(
+        "{0} não importada(s): a conversa continuou de forma diferente nas duas contas, a desta conta foi mantida",
+        "{0} not imported: the conversation went on differently in both accounts, this account's copy was kept");
+    public static string ImportHowToResume => T(
+        "Para continuar uma conversa, abra o Claude Code na mesma pasta do projeto e use /resume (no terminal: claude --resume). Se a conversa estiver aberta no Claude da conta de destino, feche e abra de novo.",
+        "To continue a conversation, open Claude Code in the same project folder and use /resume (in a terminal: claude --resume). If it is open in the destination account's Claude, close and reopen it.");
+    public static string ImportFoldersMissing => T(
+        "Atenção: este perfil não tem acesso a estas pastas, onde as conversas rodavam. Adicione-as em ⋯ → Editar perfil para continuar essas conversas:\n{0}",
+        "Note: this profile has no access to these folders, where the conversations ran. Add them in ⋯ → Edit profile to continue those conversations:\n{0}");
+
     public static string UserComment => "Claude Multi-Account profile";
     public static string TerminalHint => T(
         "Dica: para usar o Claude Code (CLI) neste perfil, instale com: irm https://claude.ai/install.ps1 | iex",

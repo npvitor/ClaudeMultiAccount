@@ -33,19 +33,24 @@ public static class LocalUsers
         }
     }
 
-    /// <summary>Turns "Pessoal" into a valid, unused Windows user name such as "claude-pessoal".</summary>
-    public static string SuggestUserName(string displayName, IEnumerable<Profile> existing)
+    /// <summary>"Conta Pessoal" → "conta-pessoal": lowercase ASCII letters and digits, no accents, single dashes.</summary>
+    public static string Slug(string text)
     {
-        var normalized = displayName.Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder();
-        foreach (var c in normalized)
+        foreach (var c in text.Normalize(NormalizationForm.FormD))
         {
             if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
                 continue;
             var lower = char.ToLowerInvariant(c);
             sb.Append(lower is >= 'a' and <= 'z' or >= '0' and <= '9' ? lower : '-');
         }
-        var slug = string.Join('-', sb.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return string.Join('-', sb.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>Turns "Pessoal" into a valid, unused Windows user name such as "claude-pessoal".</summary>
+    public static string SuggestUserName(string displayName, IEnumerable<Profile> existing)
+    {
+        var slug = Slug(displayName);
         if (slug.Length == 0)
             slug = "profile";
 

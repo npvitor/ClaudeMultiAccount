@@ -19,9 +19,20 @@ public sealed class ScriptFailedException : LauncherException
 /// </summary>
 public static class ScriptRunner
 {
-    public static void Run(Profile profile, string password, string step, string body, TimeSpan timeout)
+    public static void Run(Profile profile, string password, string step, string body, TimeSpan timeout) =>
+        Run(Paths.RequireProfileWork(profile.WindowsUser), step, body, scriptPath =>
+        {
+            var command = $"\"{Paths.PowerShell}\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{scriptPath}\"";
+            return RunAs.Run(profile.WindowsUser, password, command, hidden: true, wait: true, timeout);
+        });
+
+    /// <summary>The same as <see cref="Run(Profile,string,string,string,TimeSpan)"/>, for the launcher's own account.</summary>
+    public static void RunCurrentUser(string step, string body, TimeSpan timeout) =>
+        Run(Paths.Temp, step, body, scriptPath => (uint)ProcessRunner.Run(Paths.PowerShell,
+            new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath }, out _, timeout));
+
+    static void Run(string work, string step, string body, Func<string, uint> start)
     {
-        var work = Paths.RequireProfileWork(profile.WindowsUser);
         var id = $"{step}-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
         var scriptPath = Path.Combine(work, id + ".ps1");
         var logPath = Path.Combine(work, id + ".log");
@@ -31,8 +42,7 @@ public static class ScriptRunner
 
         try
         {
-            var command = $"\"{Paths.PowerShell}\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{scriptPath}\"";
-            var code = RunAs.Run(profile.WindowsUser, password, command, hidden: true, wait: true, timeout);
+            var code = start(scriptPath);
             if (code != 0)
             {
                 var detail = File.Exists(logPath) ? File.ReadAllText(logPath).Trim() : $"exit code {code}";

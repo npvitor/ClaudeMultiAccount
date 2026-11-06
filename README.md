@@ -23,6 +23,7 @@ This launcher does all of that for you, then gives you a one-click **Open Claude
 - **Git just works**: it marks your folders as `safe.directory` and can set a per-profile `user.name` and `user.email`. Personal commits use your personal email.
 - **Claude stays updated**: when Claude Desktop (MSIX package) updates on your main account, the profile picks up the new version the next time you open it. With the classic installer, run **⋯ → Repair** with the new installer instead.
 - **Terminal per profile**: a PowerShell window running as that account, for the Claude Code CLI, `git` or `gh auth login`.
+- **Move Claude Code sessions between accounts**: save conversations to a `.zip` file or copy them straight to another account, and continue them there with `/resume`.
 - Starts with Windows (optional), runs from the tray, single instance.
 - Portuguese and English UI, chosen from your Windows language.
 
@@ -49,15 +50,28 @@ This launcher does all of that for you, then gives you a one-click **Open Claude
 3. Claude opens as the new profile. Sign in with the other account. You only do this once.
 4. From then on, use **Open Claude** on each card, or the tray menu.
 
-The **⋯** menu on each profile has:
+The **⋯** menu on each card has:
 
 | Option | What it does |
 | --- | --- |
+| Claude Code sessions… | Lists the account's Claude Code conversations to save them to a `.zip` file or copy them to another account (also on the main account) |
+| Import sessions from file… | Brings the conversations of an exported `.zip` into this account (also on the main account) |
 | Open terminal for this profile | PowerShell running as that account (Claude Code CLI, git, gh…) |
 | Edit profile… | Rename, recolor, change folders, Git identity and the administrator option |
 | Repair / update Claude in profile | Re-runs setup if something broke (may ask for UAC approval) |
 | Copy Windows user password | For troubleshooting only; see [Security](#security) |
 | Remove profile… | Deletes the hidden user and its data; your project files are not touched |
+
+### Moving sessions between accounts
+
+Claude Code keeps each conversation in `.claude\projects\<project folder>\<id>.jsonl` of the Windows user that ran it, plus its subagents and checkpoints. **⋯ → Claude Code sessions…** copies those files to another account, or to a `.zip` you can import later with **⋯ → Import sessions from file…**. The conversations stay in the original account too.
+
+- To continue one, open Claude Code in the **same project folder** in the other account and use `/resume` (`claude --resume` in a terminal).
+- The project folder must be shared with the destination profile (**⋯ → Edit profile**); the import summary lists any folder it can't reach.
+- Importing never loses anything: a conversation the account already has is only replaced when the imported one continues it (for example, you went on with it in the other account and are bringing it back). If it went on differently in both accounts, the account's own copy is kept.
+- Close the conversation in the destination's Claude before importing a newer version of it.
+- Only the conversations move. Sign-in, settings, memory and MCP servers stay with each account.
+- An exported `.zip` holds the full conversations, including any code, secrets or file contents they showed. Treat it like the project itself, and only import files you made or trust: when you continue a conversation, everything in it is context Claude acts on.
 
 ## How it works
 

@@ -79,7 +79,6 @@ public class ProfileCardTests
         Assert.Null(card.Profile);
         Assert.Equal(S.MainName, card.Name);
         Assert.Contains(Environment.UserName, card.Detail);
-        Assert.Equal(Visibility.Collapsed, card.MoreVisibility);
         Assert.Equal(S.MainName[..1].ToUpperInvariant(), card.Initial);
     }
 
@@ -92,7 +91,6 @@ public class ProfileCardTests
         Assert.Equal("P", card.Initial);
         Assert.Contains("claude-pessoal", card.Detail);
         Assert.EndsWith(S.ProfileAdminSuffix, card.Detail);
-        Assert.Equal(Visibility.Visible, card.MoreVisibility);
         Assert.Equal(Color.FromRgb(0xDC, 0x26, 0x26), ((SolidColorBrush)card.ColorBrush).Color);
     }
 

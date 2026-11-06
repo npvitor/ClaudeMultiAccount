@@ -13,6 +13,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using ClaudeMultiAccount.Core;
 using ClaudeMultiAccount.Localization;
+using Microsoft.Win32;
 
 namespace ClaudeMultiAccount.UI;
 
@@ -30,7 +31,6 @@ public sealed class ProfileCard
             : string.Format(S.ProfileDetail, profile.WindowsUser) + (profile.IsAdmin ? S.ProfileAdminSuffix : "");
         Initial = Name.Length > 0 ? Name[..1].ToUpperInvariant() : "?";
         ColorBrush = ParseBrush(profile?.Color ?? MainColor);
-        MoreVisibility = profile is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public Profile? Profile { get; }
@@ -38,7 +38,6 @@ public sealed class ProfileCard
     public string Detail { get; }
     public string Initial { get; }
     public Brush ColorBrush { get; }
-    public Visibility MoreVisibility { get; }
 
     public static Brush ParseBrush(string hex)
     {
@@ -71,9 +70,7 @@ public partial class MainWindow : Window
 
     void Refresh()
     {
-        var cards = new List<ProfileCard> { new(null) };
-        cards.AddRange(_store.Profiles.Select(p => new ProfileCard(p)));
-        ProfileList.ItemsSource = cards;
+        ProfileList.ItemsSource = Accounts();
         CurrentApp?.Tray?.Rebuild();
     }
 
@@ -145,9 +142,17 @@ public partial class MainWindow : Window
 
     void More_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: ProfileCard { Profile: { } profile } } button)
+        if (sender is not Button { Tag: ProfileCard card } button)
             return;
         var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
+        menu.Items.Add(MenuItem(S.MenuSessions, () => ShowSessions(card)));
+        menu.Items.Add(MenuItem(S.MenuImportSessions, () => _ = ImportSessionsAsync(card)));
+        if (card.Profile is not { } profile)
+        {
+            menu.IsOpen = true;
+            return;
+        }
+        menu.Items.Add(new Separator());
         menu.Items.Add(MenuItem(S.MenuTerminal, () => _ = OpenTerminalAsync(profile)));
         menu.Items.Add(MenuItem(S.MenuEdit, () => Edit(profile)));
         menu.Items.Add(MenuItem(S.MenuRepair, () => _ = RepairAsync(profile)));
@@ -193,6 +198,43 @@ public partial class MainWindow : Window
             var password = Secret.Unprotect(profile.ProtectedPassword);
             return Task.Run(() => ClaudeDesktop.OpenTerminal(profile, password));
         });
+
+    IReadOnlyList<ProfileCard> Accounts() =>
+        new[] { new ProfileCard(null) }.Concat(_store.Profiles.Select(p => new ProfileCard(p))).ToList();
+
+    void ShowSessions(ProfileCard account)
+    {
+        var others = Accounts().Where(a => a.Profile != account.Profile).ToList();
+        new SessionsWindow(account, others) { Owner = this }.ShowDialog();
+    }
+
+    async Task ImportSessionsAsync(ProfileCard account)
+    {
+        var dialog = new OpenFileDialog { Filter = S.SessionsFilter, CheckFileExists = true };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        var path = dialog.FileName;
+
+        SessionManifest manifest;
+        try
+        {
+            manifest = SessionTransfer.ReadManifest(path);
+        }
+        catch (Exception ex)
+        {
+            Dialogs.Error(this, ex);
+            return;
+        }
+        var exported = manifest.ExportedAtUtc.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+        if (!Dialogs.Confirm(this, string.Format(S.ConfirmImport, manifest.Sessions.Count, manifest.Source, exported, account.Name)))
+            return;
+
+        await RunBusyAsync(string.Format(S.StatusImporting, account.Name), async _ =>
+        {
+            var result = await Task.Run(() => SessionTransfer.Import(SessionHost.For(account.Profile), path));
+            Dialogs.Info(this, SessionsWindow.DescribeImport(result, account));
+        });
+    }
 
     void Edit(Profile profile)
     {

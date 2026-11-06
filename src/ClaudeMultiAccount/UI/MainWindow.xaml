@@ -69,7 +69,7 @@
                                         <Button Style="{StaticResource PrimaryButton}" Content="{x:Static loc:S.OpenClaude}"
                                                 Tag="{Binding}" Click="Open_Click" />
                                         <Button Style="{StaticResource IconButton}" Content="&#x22EF;" Margin="4,0,0,0"
-                                                Visibility="{Binding MoreVisibility}" ToolTip="{x:Static loc:S.More}"
+                                                ToolTip="{x:Static loc:S.More}"
                                                 Tag="{Binding}" Click="More_Click" />
                                     </StackPanel>
                                 </Grid>

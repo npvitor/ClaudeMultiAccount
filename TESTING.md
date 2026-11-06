@@ -19,6 +19,7 @@ Runs without admin rights and changes nothing on the machine (it works only in `
 | `ClaudeDesktop` | detection on this machine, launch script (ASCII, CRLF, exit 9 when Claude is missing), terminal command (length, quoting, valid PowerShell) |
 | `SecureFolder` | ProgramData folders are trusted only when they are real folders (junctions are never followed) owned by Administrators or SYSTEM, with the sentinel file in each work folder |
 | `Elevation` | the elevated entry point refuses other accounts, users the app didn't create, the requesting account itself, unknown operations, bad package names and broken request files |
+| `SessionTransfer` | listing (title, folder, size) and export/import run as the current user against fake `.claude` folders: new, unchanged, continued, newer-in-destination and diverged conversations; archives with paths outside the session folders, without a manifest or that aren't zips are refused whole; the import summary |
 | `StartupRegistration`, `S`, UI models | Run key on/off, every string in both languages with matching `{0}` placeholders, profile cards and step states |
 
 ### Admin integration tests
@@ -67,4 +68,5 @@ The parts below need a person: UAC prompts, the tray icon menu, other apps (Expl
 8. Close the window: the tray balloon shows once; right-click the tray icon: it opens each profile, **Show window** and **Exit** work.
 9. **Settings → Start with Windows**: sign out and in, app starts in the tray only. **Settings → Open logs folder** and the banner's **Download** open Explorer and the browser.
 10. **⋯ → Remove**: confirm, UAC; card disappears, the user is gone from `lusrmgr.msc`/`net user`, `C:\Users\<user>` is deleted (or the warning names it).
-11. Windows in English and in Portuguese: texts follow the system language.
+11. **⋯ → Claude Code sessions…** on the main account: the list shows your conversations. Copy one to a profile, open the profile's terminal in the project folder and `claude --resume` it. Continue it there and copy it back: the summary says "updated". **Save file…** plus **⋯ → Import sessions from file…** on another profile do the same through a `.zip`.
+12. Windows in English and in Portuguese: texts follow the system language.

@@ -23,6 +23,7 @@ Este launcher faz tudo isso por você e deixa um botão **Abrir Claude** para ca
 - **O Git funciona direto**: as pastas entram como `safe.directory`, e dá para definir `user.name` e `user.email` por perfil. Os commits pessoais saem com o e-mail pessoal.
 - **O Claude fica atualizado**: quando o Claude Desktop (pacote MSIX) da conta principal atualiza, o perfil recebe a versão nova na próxima vez que você abrir. Com o instalador clássico, use **⋯ → Reparar** com o instalador novo.
 - **Terminal por perfil**: uma janela do PowerShell rodando como aquela conta, para o Claude Code CLI, `git` ou `gh auth login`.
+- **Leve sessões do Claude Code entre contas**: salve conversas num arquivo `.zip` ou copie direto para outra conta e continue lá com `/resume`.
 - Inicia com o Windows (opcional), fica na bandeja e roda em instância única.
 - Interface em português ou inglês, conforme o idioma do Windows.
 
@@ -49,15 +50,28 @@ Este launcher faz tudo isso por você e deixa um botão **Abrir Claude** para ca
 3. O Claude abre no novo perfil. Faça login com a outra conta; isso é feito uma única vez.
 4. Depois disso é só usar **Abrir Claude** em cada cartão, ou o menu da bandeja.
 
-O menu **⋯** de cada perfil tem:
+O menu **⋯** de cada cartão tem:
 
 | Opção | O que faz |
 | --- | --- |
+| Sessões do Claude Code… | Lista as conversas do Claude Code da conta para salvar num arquivo `.zip` ou copiar para outra conta (também na conta principal) |
+| Importar sessões de arquivo… | Traz para esta conta as conversas de um `.zip` exportado (também na conta principal) |
 | Abrir terminal deste perfil | PowerShell rodando como aquela conta (Claude Code CLI, git, gh…) |
 | Editar perfil… | Renomear, trocar a cor, as pastas, a identidade do Git e a opção de administrador |
 | Reparar / atualizar Claude no perfil | Refaz a configuração se algo quebrou (pode pedir aprovação do UAC) |
 | Copiar senha do usuário do Windows | Só para resolver problemas; veja [Segurança](#segurança) |
 | Remover perfil… | Exclui o usuário oculto e os dados dele; os arquivos dos projetos não são afetados |
+
+### Levar sessões de uma conta para outra
+
+O Claude Code guarda cada conversa em `.claude\projects\<pasta do projeto>\<id>.jsonl` do usuário do Windows que a rodou, junto com os subagentes e os checkpoints. **⋯ → Sessões do Claude Code…** copia esses arquivos para outra conta, ou para um `.zip` que você importa depois com **⋯ → Importar sessões de arquivo…**. As conversas continuam na conta de origem também.
+
+- Para continuar uma conversa, abra o Claude Code na **mesma pasta do projeto** na outra conta e use `/resume` (`claude --resume` no terminal).
+- A pasta do projeto precisa estar liberada para o perfil de destino (**⋯ → Editar perfil**); o resumo da importação lista as pastas que ele não alcança.
+- A importação nunca perde nada: uma conversa que a conta já tem só é substituída quando a importada é a continuação dela (por exemplo, você continuou na outra conta e está trazendo de volta). Se ela continuou de jeitos diferentes nas duas contas, a cópia da própria conta é mantida.
+- Feche a conversa no Claude da conta de destino antes de importar uma versão mais nova dela.
+- Só as conversas mudam de conta. Login, configurações, memória e servidores MCP continuam em cada conta.
+- Um `.zip` exportado tem as conversas completas, incluindo código, segredos ou conteúdo de arquivos que apareceram nelas. Trate-o como o próprio projeto, e só importe arquivos que você gerou ou em que confia: ao continuar uma conversa, tudo o que está nela vira contexto para o Claude agir.
 
 ## Como funciona
 
