@@ -27,7 +27,8 @@ public sealed class SessionInfo
 public sealed class SessionManifest
 {
     public const string FormatName = "claude-multi-account-sessions";
-    public const int CurrentVersion = 1;
+    /// <summary>2: the file may carry <c>desktop/&lt;id&gt;.json</c>, the session's entry in the Claude Desktop sidebar.</summary>
+    public const int CurrentVersion = 2;
 
     public string Format { get; set; } = FormatName;
     public int Version { get; set; } = CurrentVersion;
@@ -51,25 +52,57 @@ public enum ImportState
     Conflict,
 }
 
+/// <summary>
+/// Whether a session shows in the Claude Desktop sidebar (Code tab). The sidebar doesn't list the transcripts:
+/// it lists <c>claude-code-sessions\&lt;account&gt;\&lt;organization&gt;\local_*.json</c>, one folder per Claude
+/// login, so a conversation brought in (or one from another login of the same Windows user) needs an entry there.
+/// </summary>
+public enum DesktopListing
+{
+    /// <summary>Not added: no Claude Desktop, or no folder (the conversation ran in) to point it at.</summary>
+    None,
+    /// <summary>An entry was added for the account signed in to Claude Desktop.</summary>
+    Added,
+    /// <summary>The signed-in account already listed it.</summary>
+    AlreadyListed,
+    /// <summary>The signed-in account has it, archived: it only shows again once unarchived.</summary>
+    Archived,
+}
+
+/// <summary>What the import found of Claude Desktop in the destination account.</summary>
+public enum DesktopStatus
+{
+    /// <summary>Claude Desktop has no data for this Windows user (only the CLI is used).</summary>
+    NotInstalled,
+    /// <summary>Claude Desktop is there, but the signed-in account never opened the Code tab, so its folder is unknown.</summary>
+    NoAccount,
+    /// <summary>The sessions were added to the sidebar of the account signed in to Claude Desktop.</summary>
+    Ready,
+}
+
 public sealed class ImportedSession
 {
     public string Id { get; set; } = "";
     public string ProjectDir { get; set; } = "";
     public ImportState State { get; set; }
+    public DesktopListing Listed { get; set; }
 }
 
 public sealed class ImportResult
 {
-    public ImportResult(SessionManifest manifest, IReadOnlyList<ImportedSession> sessions)
+    public ImportResult(SessionManifest manifest, IReadOnlyList<ImportedSession> sessions, DesktopStatus desktop = DesktopStatus.NotInstalled)
     {
         Manifest = manifest;
         Sessions = sessions;
+        Desktop = desktop;
     }
 
     public SessionManifest Manifest { get; }
     public IReadOnlyList<ImportedSession> Sessions { get; }
+    public DesktopStatus Desktop { get; }
 
     public int Count(ImportState state) => Sessions.Count(s => s.State == state);
+    public int Count(DesktopListing listed) => Sessions.Count(s => s.Listed == listed);
 
     /// <summary>Working folders of the sessions that were written to the account.</summary>
     public IEnumerable<string> WrittenFolders =>
@@ -86,11 +119,12 @@ public sealed class ImportResult
 /// </summary>
 public sealed class SessionHost
 {
-    internal SessionHost(string workFolder, Action<string, string, TimeSpan> runScript, string? claudeHome = null)
+    internal SessionHost(string workFolder, Action<string, string, TimeSpan> runScript, string? claudeHome = null, string? desktopHome = null)
     {
         WorkFolder = workFolder;
         RunScript = runScript;
         ClaudeHome = claudeHome;
+        DesktopHome = desktopHome;
     }
 
     internal string WorkFolder { get; }
@@ -98,6 +132,8 @@ public sealed class SessionHost
     internal Action<string, string, TimeSpan> RunScript { get; }
     /// <summary>Claude's data folder; null means the user's own (CLAUDE_CONFIG_DIR, or %USERPROFILE%\.claude).</summary>
     internal string? ClaudeHome { get; }
+    /// <summary>Claude Desktop's data folder (the one with config.json); null means the user's own, found by the script.</summary>
+    internal string? DesktopHome { get; }
 
     /// <summary>A profile, or the main account when <paramref name="profile"/> is null.</summary>
     public static SessionHost For(Profile? profile)
@@ -121,6 +157,7 @@ public static class SessionTransfer
     internal const int HeadBytes = 32 * 1024;
     /// <summary>Refuses archives that would unpack to more than this (a zip bomb, not a real export).</summary>
     internal const long MaxUnpackedBytes = 20L * 1024 * 1024 * 1024;
+    internal const long MaxDesktopEntryBytes = 4 * 1024 * 1024;
 
     public static IReadOnlyList<SessionInfo> List(SessionHost host)
     {
@@ -151,7 +188,9 @@ public static class SessionTransfer
         var stage = Path.Combine(host.WorkFolder, "x" + ShortId());
         try
         {
-            host.RunScript("export-sessions", BuildExportScript(host.ClaudeHome, stage, sessions), CopyTimeout);
+            host.RunScript("export-sessions", BuildExportScript(host.ClaudeHome, host.DesktopHome, stage, sessions), CopyTimeout);
+            // Only the basics of each sidebar entry travel: the rest is tied to the account and the app's state.
+            PrepareDesktopEntries(stage, sessions, keepSessionId: true);
             var manifest = new SessionManifest { ExportedAtUtc = DateTime.UtcNow, Source = sourceName, Sessions = sessions.ToList() };
             WriteArchive(stage, manifest, zipPath, level);
         }
@@ -187,12 +226,19 @@ public static class SessionTransfer
         try
         {
             var manifest = ExtractArchive(zipPath, stage);
-            host.RunScript("import-sessions", BuildImportScript(host.ClaudeHome, stage, output), CopyTimeout);
-            var sessions = JsonSerializer.Deserialize<List<ImportedSession>>(File.ReadAllText(output), new JsonSerializerOptions
+            var transcripts = Directory.EnumerateDirectories(Path.Combine(stage, "projects"))
+                .SelectMany(dir => Directory.EnumerateFiles(dir, "*.jsonl"))
+                .Select(Path.GetFileNameWithoutExtension)
+                .Select(id => manifest.Sessions.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase)) ?? new SessionInfo { Id = id! })
+                .ToList();
+            PrepareDesktopEntries(stage, transcripts, keepSessionId: false);
+            host.RunScript("import-sessions", BuildImportScript(host.ClaudeHome, host.DesktopHome, stage, output), CopyTimeout);
+            var report = JsonSerializer.Deserialize<ImportReport>(File.ReadAllText(output), new JsonSerializerOptions
             {
+                PropertyNameCaseInsensitive = true,
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
-            }) ?? new();
-            return new ImportResult(manifest, sessions);
+            });
+            return new ImportResult(manifest, report?.Sessions ?? new(), report?.Desktop ?? DesktopStatus.NotInstalled);
         }
         finally
         {
@@ -219,6 +265,120 @@ public static class SessionTransfer
 
     /// <summary>Staging folders get short names: the scripts run on Windows PowerShell, where paths stop at 260 characters.</summary>
     static string ShortId() => Guid.NewGuid().ToString("N")[..8];
+
+    sealed class ImportReport
+    {
+        public DesktopStatus Desktop { get; set; }
+        public List<ImportedSession> Sessions { get; set; } = new();
+    }
+
+    // ---- Claude Desktop sidebar ----
+
+    /// <summary>
+    /// Rewrites <c>&lt;stage&gt;\desktop\&lt;id&gt;.json</c> for each session as a plain sidebar entry
+    /// (see <see cref="DesktopEntry"/>), made up from the session's details when there is none. A session whose
+    /// folder is unknown gets no entry. On import every entry gets a new id, so it never meets a deleted one.
+    /// </summary>
+    internal static void PrepareDesktopEntries(string stage, IEnumerable<SessionInfo> sessions, bool keepSessionId)
+    {
+        var folder = Path.Combine(stage, "desktop");
+        foreach (var session in sessions)
+        {
+            if (!IsSessionId(session.Id))
+                continue;
+            var path = Path.Combine(folder, session.Id + ".json");
+            string? entry = null;
+            try
+            {
+                // A real entry is a few hundred KB at most; anything bigger isn't one and isn't loaded.
+                using var doc = File.Exists(path) && new FileInfo(path).Length <= MaxDesktopEntryBytes ? JsonDocument.Parse(File.ReadAllBytes(path)) : null;
+                var source = doc?.RootElement;
+                var id = keepSessionId && source is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("sessionId", out var sid) &&
+                         sid.ValueKind == JsonValueKind.String && IsDesktopSessionId(sid.GetString())
+                    ? sid.GetString()!
+                    : "local_" + Guid.NewGuid();
+                entry = DesktopEntry(source, session, id);
+            }
+            catch (JsonException)
+            {
+                entry = DesktopEntry(null, session, "local_" + Guid.NewGuid());
+            }
+            if (entry is null)
+            {
+                Paths.TryDelete(path);
+                continue;
+            }
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(path, entry, new UTF8Encoding(false));
+        }
+    }
+
+    internal static bool IsDesktopSessionId(string? id) => id is not null && id.StartsWith("local_", StringComparison.Ordinal) && IsSessionId(id[6..]);
+
+    /// <summary>
+    /// A Claude Desktop sidebar entry for <paramref name="info"/> with only what any session has (the same fields
+    /// as an entry the app writes for a short session): the folder, the dates, the title and the model chosen.
+    /// Connectors, permissions granted during the session and the app's own state stay behind, since they belong
+    /// to the account it came from. Returns null when the folder the conversation ran in is unknown.
+    /// </summary>
+    internal static string? DesktopEntry(JsonElement? source, SessionInfo info, string sessionId)
+    {
+        var s = source is { ValueKind: JsonValueKind.Object } o ? o : (JsonElement?)null;
+        string? Str(string name) =>
+            s is { } e && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 and <= 1000 } t ? t : null;
+        long? Num(string name) =>
+            s is { } e && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) && n > 0 ? n : null;
+        static string? Folder(string? path) =>
+            path is { Length: > 0 } p && p.IndexOfAny(Path.GetInvalidPathChars()) < 0 && Path.IsPathFullyQualified(p) ? p : null;
+
+        var cwd = Folder(Str("cwd")) ?? Folder(info.Cwd);
+        if (cwd is null)
+            return null;
+        long? modified = info.ModifiedUtc > DateTime.MinValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(info.ModifiedUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+            : null;
+        // The conversation may have gone on (in a terminal) after it was last open in Claude Desktop.
+        var activity = Math.Max(Num("lastActivityAt") ?? 0, modified ?? 0) is > 0 and var latest
+            ? latest
+            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var folderName = Path.GetFileName(cwd.TrimEnd('\\', '/'));
+        var title = Clean(Str("title")) ?? Clean(info.Title) ?? (folderName.Length > 0 ? folderName : cwd);
+
+        using var stream = new MemoryStream();
+        using (var w = new Utf8JsonWriter(stream))
+        {
+            w.WriteStartObject();
+            w.WriteString("sessionId", sessionId);
+            w.WriteString("cliSessionId", info.Id);
+            w.WriteString("cwd", cwd);
+            w.WriteString("originCwd", Folder(Str("originCwd")) ?? cwd);
+            w.WriteNumber("lastFocusedAt", Num("lastFocusedAt") ?? activity);
+            w.WriteNumber("createdAt", Num("createdAt") ?? activity);
+            w.WriteNumber("lastActivityAt", activity);
+            // Missing ones are filled on import from the account's latest session.
+            foreach (var field in new[] { "model", "effort" })
+                if (Str(field) is { } value)
+                    w.WriteString(field, value);
+            w.WriteBoolean("isArchived", false);
+            w.WriteString("title", title);
+            w.WriteString("titleSource", Str("titleSource") ?? "auto");
+            if (Str("permissionMode") is { } mode)
+                w.WriteString("permissionMode", mode);
+            w.WriteStartArray("remoteMcpServersConfig");
+            w.WriteEndArray();
+            if (Num("completedTurns") is { } turns)
+                w.WriteNumber("completedTurns", turns);
+            w.WriteStartArray("alwaysAllowedReasons");
+            w.WriteEndArray();
+            w.WriteStartArray("sessionPermissionUpdates");
+            w.WriteEndArray();
+            w.WriteBoolean("classifierSummaryEnabled", true);
+            w.WriteStartObject("spawnSeed");
+            w.WriteEndObject();
+            w.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
 
     // ---- Names ----
 
@@ -255,6 +415,8 @@ public static class SessionTransfer
                     _ => IsSessionId(parts[2]),
                 },
             "file-history" => parts.Length == 1 ? folder : IsSessionId(parts[1]) && (parts.Length >= 3 || folder),
+            "desktop" => parts.Length == 1 ? folder
+                : parts.Length == 2 && !folder && parts[1].EndsWith(".json", StringComparison.Ordinal) && IsSessionId(parts[1][..^5]),
             _ => false,
         };
     }
@@ -577,6 +739,59 @@ public static class SessionTransfer
         }
         """;
 
+    /// <summary>
+    /// <c>$desktop</c>: Claude Desktop's data folder as the account's user sees it, or $null. Where it is depends on
+    /// the version and the installer (%LOCALAPPDATA%\Claude-Data\&lt;package&gt;, %APPDATA%\Claude, or the MSIX
+    /// package's own copy of it), and an old one may be left behind after a move: the one in use has the newest config.json.
+    /// </summary>
+    static string DesktopLine(string? desktopHome) => desktopHome is not null
+        ? $"$desktop = {ScriptRunner.Quote(desktopHome)}; if (-not (Test-Path -LiteralPath (Join-Path $desktop 'config.json') -PathType Leaf)) {{ $desktop = $null }}"
+        : """
+          $desktop = $null
+          $candidates = New-Object System.Collections.Generic.List[string]
+          if ($env:LOCALAPPDATA) {
+              foreach ($d in Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Claude-Data') -Directory -Force -ErrorAction SilentlyContinue) { $candidates.Add($d.FullName) }
+              foreach ($d in Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Claude_*' -Force -ErrorAction SilentlyContinue) {
+                  $candidates.Add([System.IO.Path]::Combine($d.FullName, 'LocalCache', 'Roaming', 'Claude'))
+              }
+          }
+          if ($env:APPDATA) { $candidates.Add((Join-Path $env:APPDATA 'Claude')) }
+          $newest = [DateTime]::MinValue
+          foreach ($c in $candidates) {
+              $config = New-Object System.IO.FileInfo (Join-Path $c 'config.json')
+              if ($config.Exists -and $config.LastWriteTimeUtc -gt $newest) { $desktop = $c; $newest = $config.LastWriteTimeUtc }
+          }
+          """;
+
+    /// <summary>
+    /// <c>Get-SidebarEntries $folder</c>: the Claude Desktop sidebar entries of one login, read from the first bytes
+    /// of each file only (the fields used here come first; the app's snapshots that follow are large).
+    /// </summary>
+    const string SidebarFunctions = """
+        $uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+        function Get-SidebarEntries([string]$folder) {
+            $index = ''
+            try { $index = [System.IO.File]::ReadAllText((Join-Path $folder 'archived-sessions.idx')) } catch { }
+            foreach ($file in Get-ChildItem -LiteralPath $folder -Filter 'local_*.json' -File -Force -ErrorAction SilentlyContinue) {
+                try {
+                    $stream = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'ReadWrite, Delete')
+                    try {
+                        $buffer = New-Object byte[] ([int][Math]::Min($file.Length, 16384))
+                        $head = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $stream.Read($buffer, 0, $buffer.Length))
+                    } finally { $stream.Dispose() }
+                } catch { continue }
+                $cli = [regex]::Match($head, '"cliSessionId"\s*:\s*"(' + $uuid + ')"')
+                if (-not $cli.Success) { continue }
+                $at = [regex]::Match($head, '"lastActivityAt"\s*:\s*(\d{1,15})')
+                [pscustomobject]@{
+                    Cli = $cli.Groups[1].Value; Path = $file.FullName; Head = $head; Written = $file.LastWriteTimeUtc
+                    When = $(if ($at.Success) { [long]$at.Groups[1].Value } else { 0 })
+                    Archived = ($head -match '"isArchived"\s*:\s*true') -or $index.Contains('"' + $file.BaseName + '"')
+                }
+            }
+        }
+        """;
+
     internal static string BuildListScript(string? claudeHome, string outputPath) => $$"""
         {{RootLine(claudeHome)}}
         {{CopyFunctions}}
@@ -614,13 +829,26 @@ public static class SessionTransfer
         Write-Utf8 {{ScriptRunner.Quote(outputPath)}} (ConvertTo-Json -InputObject $list.ToArray() -Compress)
         """;
 
-    internal static string BuildExportScript(string? claudeHome, string stage, IEnumerable<SessionInfo> sessions)
+    internal static string BuildExportScript(string? claudeHome, string? desktopHome, string stage, IEnumerable<SessionInfo> sessions)
     {
         var body = new StringBuilder()
             .AppendLine(RootLine(claudeHome))
+            .AppendLine(DesktopLine(desktopHome))
             .AppendLine(CopyFunctions)
+            .AppendLine(SidebarFunctions)
             .AppendLine($"$stage = {ScriptRunner.Quote(stage)}")
             .AppendLine("""
+                # The sidebar entry of each conversation, from any Claude login of this Windows user (the latest one wins).
+                $entries = @{}
+                if ($desktop) {
+                    foreach ($account in Get-ChildItem -LiteralPath (Join-Path $desktop 'claude-code-sessions') -Directory -Force -ErrorAction SilentlyContinue) {
+                        foreach ($org in Get-ChildItem -LiteralPath $account.FullName -Directory -Force -ErrorAction SilentlyContinue) {
+                            foreach ($e in Get-SidebarEntries $org.FullName) {
+                                if (-not $entries.ContainsKey($e.Cli) -or $entries[$e.Cli].When -lt $e.When) { $entries[$e.Cli] = $e }
+                            }
+                        }
+                    }
+                }
                 function Export-Session([string]$dir, [string]$id) {
                     $from = [System.IO.Path]::Combine($root, 'projects', $dir)
                     $transcript = Join-Path $from "$id.jsonl"
@@ -630,6 +858,12 @@ public static class SessionTransfer
                     Copy-Shared $transcript (Join-Path $to "$id.jsonl")
                     Copy-Tree (Join-Path $from $id) (Join-Path $to $id)
                     Copy-Tree ([System.IO.Path]::Combine($root, 'file-history', $id)) ([System.IO.Path]::Combine($stage, 'file-history', $id))
+                    $entry = $entries[$id]
+                    if ($entry) {
+                        $desktopStage = Join-Path $stage 'desktop'
+                        [void][System.IO.Directory]::CreateDirectory($desktopStage)
+                        Copy-Shared $entry.Path (Join-Path $desktopStage "$id.json")
+                    }
                 }
                 """);
         foreach (var s in sessions)
@@ -641,10 +875,76 @@ public static class SessionTransfer
     /// Transcripts only grow, so comparing the shorter one with the start of the longer one tells which copy
     /// continues the other. Only a continuation replaces what the account has; anything else keeps it.
     /// </summary>
-    internal static string BuildImportScript(string? claudeHome, string stage, string outputPath) => $$"""
+    internal static string BuildImportScript(string? claudeHome, string? desktopHome, string stage, string outputPath) => $$"""
         {{RootLine(claudeHome)}}
+        {{DesktopLine(desktopHome)}}
         {{CopyFunctions}}
+        {{SidebarFunctions}}
         $stage = {{ScriptRunner.Quote(stage)}}
+        # The sidebar of the account signed in to Claude Desktop: claude-code-sessions\<account>\<organization>.
+        # An account that never opened the Code tab has no folder yet.
+        $desktopState = 'NotInstalled'; $sessionsDir = $null; $listed = @{}; $defaults = @{}
+        if ($desktop) {
+            $desktopState = 'NoAccount'
+            $config = ''
+            try { $config = [System.IO.File]::ReadAllText((Join-Path $desktop 'config.json')) } catch { }
+            $m = [regex]::Match($config, '"lastKnownAccountUuid"\s*:\s*"(' + $uuid + ')"')
+            if ($m.Success) {
+                # The organization in use refreshes its extension allowlist when it loads: the latest refresh tells
+                # which one it is. Without that, the one with the latest session.
+                $loaded = @{}
+                foreach ($d in [regex]::Matches($config, '"dxt:allowlistLastUpdated:(' + $uuid + ')"\s*:\s*"([^"]{1,40})"')) { $loaded[$d.Groups[1].Value] = $d.Groups[2].Value }
+                $best = $null
+                foreach ($org in Get-ChildItem -LiteralPath ([System.IO.Path]::Combine($desktop, 'claude-code-sessions', $m.Groups[1].Value)) -Directory -Force -ErrorAction SilentlyContinue) {
+                    if ($org.Name -notmatch ('^' + $uuid + '$')) { continue }
+                    $latest = Get-ChildItem -LiteralPath $org.FullName -Filter 'local_*.json' -File -Force -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+                    $rank = '{0,-40}|{1:o}' -f [string]$loaded[$org.Name], $(if ($latest) { $latest.LastWriteTimeUtc } else { [DateTime]::MinValue })
+                    if (-not $best -or [string]::CompareOrdinal($rank, $best.Rank) -gt 0) { $best = @{ Dir = $org.FullName; Rank = $rank } }
+                }
+                if ($best) { $sessionsDir = $best.Dir }
+            }
+            if ($sessionsDir) {
+                $desktopState = 'Ready'
+                $newest = $null
+                foreach ($e in Get-SidebarEntries $sessionsDir) {
+                    $listed[$e.Cli] = $e
+                    if (-not $newest -or $e.Written -gt $newest.Written) { $newest = $e }
+                }
+                # What an entry lacks (the conversation never ran in Claude Desktop) comes from the account's latest session.
+                if ($newest) {
+                    foreach ($field in 'model', 'effort', 'permissionMode') {
+                        $d = [regex]::Match($newest.Head, '"' + $field + '"\s*:\s*("[A-Za-z0-9._\[\]-]{1,100}")')
+                        if ($d.Success) { $defaults[$field] = $d.Groups[1].Value }
+                    }
+                }
+            }
+        }
+        # Showing it in the sidebar is a bonus: a failure here never stops the import of the conversations.
+        function Add-ToSidebar([string]$id) {
+            if ($desktopState -ne 'Ready') { return 'None' }
+            if ($listed.ContainsKey($id)) { return $(if ($listed[$id].Archived) { 'Archived' } else { 'AlreadyListed' }) }
+            $file = $null
+            try {
+                $ready = [System.IO.Path]::Combine($stage, 'desktop', "$id.json")
+                if (-not (Test-Path -LiteralPath $ready -PathType Leaf)) { return 'None' }
+                $text = [System.IO.File]::ReadAllText($ready)
+                $sid = [regex]::Match($text, '^\{"sessionId":"(local_' + $uuid + ')",')
+                if (-not $sid.Success) { return 'None' }
+                $missing = ''
+                foreach ($field in $defaults.Keys) { if ($text -notmatch ('"' + $field + '"\s*:')) { $missing += '"' + $field + '":' + $defaults[$field] + ',' } }
+                $text = $sid.Value + $missing + $text.Substring($sid.Length)
+                $file = Join-Path $sessionsDir ($sid.Groups[1].Value + '.json')
+                # Written aside and moved in, so Claude never reads half of it.
+                Write-Utf8 "$file.importing" $text
+                [System.IO.File]::Move("$file.importing", $file)
+                $listed[$id] = @{ Archived = $false }
+                return 'Added'
+            } catch {
+                if ($file) { try { [System.IO.File]::Delete("$file.importing") } catch { } }
+                return 'None'
+            }
+        }
         function Get-PrefixHash([string]$path, [long]$length) {
             $sha = [System.Security.Cryptography.SHA256]::Create()
             $stream = [System.IO.File]::Open($path, 'Open', 'Read', 'ReadWrite, Delete')
@@ -692,9 +992,13 @@ public static class SessionTransfer
                         if (Test-Path -LiteralPath $partial) { [System.IO.File]::Delete($partial) }
                     }
                 }
-                $results.Add([pscustomobject]@{ Id = $id; ProjectDir = $dir.Name; State = $state })
+                # The conversation is in the account now (imported or already there): make it show in Claude Desktop too.
+                $sidebar = 'None'
+                if (Test-Path -LiteralPath $target -PathType Leaf) { $sidebar = Add-ToSidebar $id }
+                $results.Add([pscustomobject]@{ Id = $id; ProjectDir = $dir.Name; State = $state; Listed = $sidebar })
             }
         }
-        Write-Utf8 {{ScriptRunner.Quote(outputPath)}} (ConvertTo-Json -InputObject $results.ToArray() -Compress)
+        $report = [pscustomobject]@{ Desktop = $desktopState; Sessions = $results.ToArray() }
+        Write-Utf8 {{ScriptRunner.Quote(outputPath)}} (ConvertTo-Json -InputObject $report -Compress -Depth 4)
         """;
 }

@@ -224,6 +224,16 @@ public static class S
     public static string ImportHowToResume => T(
         "Para continuar uma conversa, abra o Claude Code na mesma pasta do projeto e use /resume (no terminal: claude --resume). Se a conversa estiver aberta no Claude da conta de destino, feche e abra de novo.",
         "To continue a conversation, open Claude Code in the same project folder and use /resume (in a terminal: claude --resume). If it is open in the destination account's Claude, close and reopen it.");
+    public static string ImportListed => T(
+        "{0} adicionada(s) à barra lateral do Claude Desktop, na última conta que entrou nele. Feche o Claude por completo (inclusive o ícone da bandeja) e abra de novo para vê-las. Se trocou de conta no Claude, entre na conta de destino antes de importar.",
+        "{0} added to the Claude Desktop sidebar, for the last account signed in to it. Quit Claude completely (tray icon included) and open it again to see them. If you switch Claude accounts, sign in to the destination one before importing.");
+    public static string ImportArchived => T(
+        "{0} já está(ão) na barra lateral do Claude Desktop, mas arquivada(s): desarquive-as lá para vê-las.",
+        "{0} already in the Claude Desktop sidebar, but archived: unarchive them there to see them.");
+    public static string SessionsThisClaude => T("{0} (barra lateral do Claude)", "{0} (Claude sidebar)");
+    public static string ImportDesktopNoAccount => T(
+        "Para as conversas aparecerem na barra lateral do Claude Desktop, abra a aba Code uma vez na conta conectada nele e importe de novo.",
+        "For the conversations to show in the Claude Desktop sidebar, open the Code tab once in the account signed in to it and import again.");
     public static string ImportFoldersMissing => T(
         "Atenção: este perfil não tem acesso a estas pastas, onde as conversas rodavam. Adicione-as em ⋯ → Editar perfil para continuar essas conversas:\n{0}",
         "Note: this profile has no access to these folders, where the conversations ran. Add them in ⋯ → Edit profile to continue those conversations:\n{0}");

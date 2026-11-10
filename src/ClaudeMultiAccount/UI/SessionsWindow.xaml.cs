@@ -54,6 +54,8 @@ public sealed class SessionItem : INotifyPropertyChanged
     };
 }
 
+public sealed record CopyTarget(ProfileCard Card, string Name);
+
 /// <summary>Lists one account's Claude Code sessions, to save them to a file or copy them to another account.</summary>
 public partial class SessionsWindow : Window
 {
@@ -66,9 +68,11 @@ public partial class SessionsWindow : Window
         _account = account;
         InitializeComponent();
         Title = Heading.Text = string.Format(S.SessionsTitle, account.Name);
-        TargetBox.ItemsSource = others;
+        // The account itself is a target too: after switching Claude logins on the same Windows user, the
+        // conversations are already here and only need to show in the new login's sidebar.
+        TargetBox.ItemsSource = others.Select(o => new CopyTarget(o, o.Name))
+            .Append(new CopyTarget(account, string.Format(S.SessionsThisClaude, account.Name))).ToList();
         TargetBox.SelectedIndex = 0;
-        CopyPanel.Visibility = others.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         Loaded += async (_, _) => await LoadAsync();
     }
 
@@ -150,7 +154,7 @@ public partial class SessionsWindow : Window
 
     async void Copy_Click(object sender, RoutedEventArgs e)
     {
-        if (TargetBox.SelectedItem is not ProfileCard target)
+        if (TargetBox.SelectedItem is not CopyTarget { Card: var target })
             return;
         var sessions = Selected;
         var from = _account.Profile;
@@ -202,6 +206,12 @@ public partial class SessionsWindow : Window
             if (missing.Count > 0)
                 text.AppendLine().AppendLine(string.Format(S.ImportFoldersMissing, string.Join("\n", missing.Select(m => "   " + m))));
         }
+        if (result.Count(DesktopListing.Added) > 0)
+            text.AppendLine().AppendLine(string.Format(S.ImportListed, result.Count(DesktopListing.Added)));
+        else if (result.Desktop == DesktopStatus.NoAccount)
+            text.AppendLine().AppendLine(S.ImportDesktopNoAccount);
+        if (result.Count(DesktopListing.Archived) > 0)
+            text.AppendLine().AppendLine(string.Format(S.ImportArchived, result.Count(DesktopListing.Archived)));
         if (result.Count(ImportState.New) + result.Count(ImportState.Updated) > 0)
             text.AppendLine().Append(S.ImportHowToResume);
         return text.ToString().TrimEnd();

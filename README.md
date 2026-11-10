@@ -67,6 +67,7 @@ The **⋯** menu on each card has:
 Claude Code keeps each conversation in `.claude\projects\<project folder>\<id>.jsonl` of the Windows user that ran it, plus its subagents and checkpoints. **⋯ → Claude Code sessions…** copies those files to another account, or to a `.zip` you can import later with **⋯ → Import sessions from file…**. The conversations stay in the original account too.
 
 - To continue one, open Claude Code in the **same project folder** in the other account and use `/resume` (`claude --resume` in a terminal).
+- The import also puts the conversations in the Code tab sidebar of Claude Desktop, for the last Claude account signed in to it. Quit Claude completely (tray included) and open it again to see them. To switch Claude accounts on the same Windows user, sign in to the new one in Claude and use **Copy to: \<this account\> (Claude sidebar)** (the sidebar is per Claude account, the conversations aren't).
 - The project folder must be shared with the destination profile (**⋯ → Edit profile**); the import summary lists any folder it can't reach.
 - Importing never loses anything: a conversation the account already has is only replaced when the imported one continues it (for example, you went on with it in the other account and are bringing it back). If it went on differently in both accounts, the account's own copy is kept.
 - Close the conversation in the destination's Claude before importing a newer version of it.

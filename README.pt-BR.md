@@ -67,6 +67,7 @@ O menu **⋯** de cada cartão tem:
 O Claude Code guarda cada conversa em `.claude\projects\<pasta do projeto>\<id>.jsonl` do usuário do Windows que a rodou, junto com os subagentes e os checkpoints. **⋯ → Sessões do Claude Code…** copia esses arquivos para outra conta, ou para um `.zip` que você importa depois com **⋯ → Importar sessões de arquivo…**. As conversas continuam na conta de origem também.
 
 - Para continuar uma conversa, abra o Claude Code na **mesma pasta do projeto** na outra conta e use `/resume` (`claude --resume` no terminal).
+- A importação também coloca as conversas na barra lateral da aba Code do Claude Desktop, na última conta do Claude que entrou nele. Feche o Claude por completo (inclusive na bandeja) e abra de novo para vê-las. Para trocar de conta do Claude no mesmo usuário do Windows, entre na conta nova no Claude e use **Copiar para: \<esta conta\> (barra lateral do Claude)** (a barra lateral é separada por conta do Claude, as conversas não).
 - A pasta do projeto precisa estar liberada para o perfil de destino (**⋯ → Editar perfil**); o resumo da importação lista as pastas que ele não alcança.
 - A importação nunca perde nada: uma conversa que a conta já tem só é substituída quando a importada é a continuação dela (por exemplo, você continuou na outra conta e está trazendo de volta). Se ela continuou de jeitos diferentes nas duas contas, a cópia da própria conta é mantida.
 - Feche a conversa no Claude da conta de destino antes de importar uma versão mais nova dela.
